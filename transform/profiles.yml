@@ -1,0 +1,40 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# dbt connection profiles (profile name must match dbt_project.yml)
+#
+#   gcp    production — the transform job, as its attached service account
+#   local  development — your gcloud application-default credentials; writes
+#          to dev_silver / dev_gold (macros/generate_schema_name.sql)
+#
+# Both authenticate with method: oauth (no keyfile) and read the real bronze.
+#
+# maximum_bytes_billed (10 GiB, ~$0.06) fails any single query that would bill
+# more: the transform's hard cost cap (decision 0003). Scheduled runs read only
+# new ingest runs (MBs); the biggest query is a --full-refresh of an
+# incremental model, which reads all of its bronze table. Raise this before
+# that ever needs more (docs/roadmap.md tracks when).
+# ══════════════════════════════════════════════════════════════════════════════
+
+new_england_grid_analytics:
+  target: gcp
+  outputs:
+    local:
+      type: bigquery
+      method: oauth
+      project: new-england-grid-analytics
+      dataset: silver  # required default; every model sets its own dataset
+      location: us-east1
+      threads: 4
+      job_execution_timeout_seconds: 300
+      priority: interactive
+      maximum_bytes_billed: 10737418240  # 10 GiB per query (see header)
+
+    gcp:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('DBT_PROJECT_ID', 'new-england-grid-analytics') }}"
+      dataset: silver  # required default; every model sets its own dataset
+      location: us-east1
+      threads: 4
+      job_execution_timeout_seconds: 300
+      priority: interactive
+      maximum_bytes_billed: 10737418240  # 10 GiB per query (see header)

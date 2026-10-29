@@ -1,0 +1,21 @@
+# Tooling config for the whole repo (each component keeps its own requirements.txt)
+
+[tool.pytest.ini_options]
+# Ingest tests import `common.*` (ingest/common/)
+pythonpath = ["ingest"]
+testpaths = ["ingest/tests"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+extend-exclude = ["transform/target", "transform/dbt_packages"]
+
+[tool.ruff.lint]
+# pyflakes, pycodestyle errors, import sorting, common bug patterns
+select = ["F", "E", "I", "B"]
+# E221/E241: the codebase aligns related assignments and dict values in columns
+ignore = ["E221", "E241"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["common"]

@@ -1,0 +1,7 @@
+# Shared by every ingest job (single image, see Dockerfile). Pinned so every
+# deploy installs the same versions.
+google-cloud-bigquery==3.46.2
+pandas==3.1.0
+pyarrow==26.0.0
+requests==2.34.2
+db-dtypes==1.9.0

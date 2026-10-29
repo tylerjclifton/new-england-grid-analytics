@@ -1,0 +1,33 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# dbt project — medallion transforms from bronze to gold
+#
+# Run by the transform job (Dockerfile): `dbt build`, then `dbt source freshness`.
+# Connection settings live in profiles.yml.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: 'new_england_grid_analytics'
+version: '1.0.0'
+config-version: 2
+profile: 'new_england_grid_analytics'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages"]
+
+# Model configuration — one folder per medallion layer, one dataset per folder
+# See: https://docs.getdbt.com/docs/configuring-models
+#   bronze — append-only tables written by ingest jobs; declared as sources only
+#   silver — <bronze table>__<step> models (see models/silver/_silver__models.yml):
+#            __base is each source's cleaned copy, other steps apply one
+#            business rule each. Views by default; a model over a growing
+#            bronze table is an incremental table instead (decision 0007)
+#   gold   — tables for the dashboard and models, rebuilt every run
+models:
+  new_england_grid_analytics:
+    silver:
+      +schema: silver
+      +materialized: view
+    gold:
+      +schema: gold
+      +materialized: table

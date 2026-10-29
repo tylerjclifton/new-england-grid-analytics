@@ -1,0 +1,5 @@
+# dbt build artifacts and local state stay out of the image
+target/
+logs/
+dbt_packages/
+.user.yml

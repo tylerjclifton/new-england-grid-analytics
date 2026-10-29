@@ -1,0 +1,4 @@
+**/__pycache__
+**/*.pyc
+# Tests run in CI, not in the image
+tests/

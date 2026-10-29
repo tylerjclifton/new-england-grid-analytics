@@ -1,0 +1,42 @@
+# SQL lint for the dbt models. Uses the jinja templater with dbt builtins (ref,
+# source, var, config, is_incremental) so it runs without a warehouse
+# connection — in CI and locally alike:
+#   cd transform && sqlfluff lint models
+
+[sqlfluff]
+dialect = bigquery
+templater = jinja
+max_line_length = 120
+# Style the codebase follows on purpose, which the defaults disagree with:
+#   LT01/LT02  aligned columns and indented CTE bodies (layout spacing)
+#   AL09       explicit `x AS x` keeps column lists readable when most are renamed
+#   ST06       column order follows meaning (keys, attributes, audit), not
+#              "simple columns first"
+#   RF04       some column names (e.g. `time`) are BigQuery keywords but come
+#              from the source system unchanged
+exclude_rules = LT01, LT02, AL09, ST06, RF04
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+load_macros_from_path = macros
+
+[sqlfluff:templater:jinja:context]
+# Empty (falsy), like dbt's parse phase: skips run_query() blocks that need a
+# live warehouse (macros/last_processed_run.sql)
+execute =
+
+[sqlfluff:rules:convention.quoted_literals]
+# Single quotes for string literals
+preferred_quoted_literal_style = single_quotes
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = upper
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = upper

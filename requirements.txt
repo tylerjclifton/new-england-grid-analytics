@@ -1,0 +1,5 @@
+# Local development environment: everything the deployed components use, plus
+# dev tooling. Component dependencies live with each component (DRY).
+-r ingest/requirements.txt
+-r transform/requirements.txt
+-r requirements-dev.txt

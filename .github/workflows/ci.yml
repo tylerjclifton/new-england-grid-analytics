@@ -1,0 +1,125 @@
+# CI/CD. Every push and pull request runs the checks (no cloud credentials);
+# a push to main that passes them deploys.
+#
+#   python     ruff lint (ingest, transform entrypoint) + pytest
+#   dbt        dbt parse (project compiles) + sqlfluff lint (SQL style)
+#   terraform  fmt check + validate (no backend, no state)
+#   deploy     main only: build + push images tagged with the commit,
+#              terraform apply, then run the transform once
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python (lint + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"   # matches the Docker images
+          cache: pip
+      - name: Install
+        run: pip install -r ingest/requirements.txt -r requirements-dev.txt
+      - name: Lint
+        run: ruff check ingest transform
+      - name: Test
+        run: pytest
+
+  dbt:
+    name: dbt (parse + SQL lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: transform
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt -r ../requirements-dev.txt
+      - name: Parse
+        # Parsing checks refs, sources, macros, and YAML without a warehouse
+        run: dbt parse --profiles-dir . --target gcp
+      - name: Lint SQL
+        run: sqlfluff lint models
+
+  terraform:
+    name: Terraform (fmt + validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+      - name: Format
+        run: terraform fmt -check -recursive
+      - name: Validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  deploy:
+    name: Deploy (main)
+    needs: [python, dbt, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    # One deploy at a time; a newer push waits rather than racing an apply
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write   # OIDC token for keyless Google auth (infra/deploy.tf)
+    env:
+      REGION: us-east1
+    steps:
+      - uses: actions/checkout@v7
+
+      # Every image is tagged with the commit it was built from
+      - name: Image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/987931704118/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deployer@new-england-grid-analytics.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push images
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          for component in ingest transform; do
+            scripts/build-image.sh "$component" "$IMAGE_TAG"
+          done
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+
+      - name: Terraform apply
+        working-directory: infra
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve -var "image_tag=$IMAGE_TAG"
+
+      # Rebuild silver/gold now so model changes are live (and fail here, not
+      # silently at the next scheduled run)
+      - name: Run transform
+        run: gcloud run jobs execute transform --region="$REGION" --wait

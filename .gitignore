@@ -1,0 +1,27 @@
+# Keys & secrets
+keys/
+.env
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+
+# Python
+venv/
+.venv/
+env/
+*.pyc
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# dbt
+dbt_packages/
+logs/
+target/
+.user.yml
+
+# macOS
+.DS_Store

@@ -1,0 +1,4 @@
+# dbt Core and BigQuery adapter (the adapter brings its own compatible
+# google-cloud-bigquery, protobuf, and grpcio)
+dbt-core==1.12.6
+dbt-bigquery==1.12.1

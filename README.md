@@ -1,0 +1,194 @@
+# New England Electric Grid Analytics
+
+A data engineering and modeling project on the New England electric grid: what it burns, what it costs, how much it carries, and how weather drives all three. It ingests public grid and weather data on a schedule, transforms it through a medallion architecture in BigQuery, and builds toward load and price forecasting.
+
+**Docs:** [setup on a new machine](docs/setup.md) · [runbook](docs/runbook.md) · [decision records](docs/decisions/README.md) · [roadmap](docs/roadmap.md) · [data source notes](docs/data-sources.md)
+
+**Status:** first source (weather) built; the grid sources (ISO-NE, EIA) follow once their accounts are approved ([roadmap](docs/roadmap.md)).
+
+---
+
+## What It Does
+
+| Source | Data | Schedule | Each run pulls |
+|---|---|---|---|
+| Open-Meteo forecast API | Hourly weather for one point per ISO-NE load zone: temperature, dew point, cloud cover, solar irradiance, wind at 10 m and 100 m, precipitation, snowfall | Every 6 hours | Yesterday's best estimate plus the 7-day forecast (snapshot; every run kept) |
+
+The dbt transform runs every 6 hours, after the weather run.
+
+---
+
+## Architecture
+
+```
+Open-Meteo  ──┐                         ┌─────────────────────────────────────────┐
+(ISO-NE)    ──┼──► Cloud Run Jobs ──►   │  BigQuery                               │
+(EIA)       ──┘         ↑               │  bronze → silver → gold                 │
+                 Cloud Scheduler        │            └─ dbt Core ─┘               │
+                                        └─────────────────────────────────────────┘
+```
+
+Everything is defined in Terraform and deployed by GitHub Actions on every push to `main`. Sources in parentheses are planned.
+
+### Medallion layers
+
+Each layer is its own BigQuery dataset.
+
+| Layer | Stored as | Written by | Role |
+|---|---|---|---|
+| `bronze` | Append-only tables (Terraform-managed, deletion-protected) | Ingest jobs | Raw history. Each run appends what it saw; rows are never updated or deleted, so revisions and superseded forecasts are kept ([0001](docs/decisions/0001-append-only-bronze.md)) |
+| `silver` | Views, or incremental tables over growing bronze | dbt | Every model is `<bronze table>__<step>`: `__base` is each source's cleaned copy (renamed, typed, converted); other steps apply one rule each ([0007](docs/decisions/0007-silver-naming-and-materialization.md)) |
+| `gold` | Tables, rebuilt every run | dbt | Cross-source tables for the dashboard and models (none yet) |
+
+| Bronze table | Grain | How bronze grows |
+|---|---|---|
+| `openmeteo_forecast` | load zone × hour × ingest run | ~1,500 rows per run, ~300 MB/year: every forecast run is kept, so any hour has every forecast made of it ([0009](docs/decisions/0009-weather-per-load-zone.md)) |
+
+| Silver model | Grain | What it produces |
+|---|---|---|
+| `openmeteo_forecast__base` | load zone × hour × ingest run | Every forecast in grid units (°F, m/s, W/m²), with `lead_hours` from run to hour. A view |
+| `openmeteo_forecast__latest` | load zone × hour | The newest value per hour: best estimate for past hours, latest forecast ahead. Incremental table |
+
+**Forecast vs. best estimate.** Explaining what happened uses `__latest`. A model that predicts ahead must use what was known at the time, from `__base` at the right `lead_hours`, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md)).
+
+### Data quality
+
+Tests run inside `dbt build`, before gold is rebuilt; a failing test skips everything downstream. They sit on tables, not on views over all of bronze, so a test never rescans all history ([0003](docs/decisions/0003-cost-guardrails.md)). Then `dbt source freshness` fails the run if an ingest job has stopped writing (thresholds per source in `transform/models/bronze/_bronze__sources.yml`).
+
+### Alerting
+
+Every Cloud Run job logs one structured failure report when it fails (`ingest/common/run.py`, `transform/run.py`), and a per-job alert policy emails it, with the error or dbt's failure summary (`infra/monitoring.tf`). Only the final attempt alerts, so a blip absorbed by the retry sends nothing, and a lasting failure sends at most one email per job every 6 hours. A backstop emails if the transform hasn't succeeded in 13 hours (timeouts, out-of-memory kills, the scheduler not starting it).
+
+---
+
+## Conventions
+
+| Thing | Convention | Example |
+|---|---|---|
+| Datasets | Medallion layer | `bronze`, `silver`, `gold` |
+| Bronze tables | `<source>_<entity>` | `openmeteo_forecast` |
+| Silver models | `<bronze table>__<step>`; `__base` is the cleaned copy | `openmeteo_forecast__base`, `openmeteo_forecast__latest` |
+| Gold tables | `<domain>_<entity>` | |
+| Ingest jobs | `ingest/<source>-<entity>/main.py` → `bronze.<source>_<entity>` | `ingest/openmeteo-forecast` → `bronze.openmeteo_forecast` |
+| Bronze columns | Source system's names and units, plus audit columns | `temperature_2m`, `shortwave_radiation` |
+| Silver / gold columns | `snake_case`; `_at` = TIMESTAMP (UTC, [0002](docs/decisions/0002-timestamps-in-utc.md)); `_date` = DATE (Eastern); measures carry their unit; booleans `is_` | `hour_at`, `temperature_f`, `wind_speed_100m_ms` |
+| Time zones | Stored in UTC; local time derived in silver or gold with `America/New_York` | |
+| Load zones | ISO-NE's eight names | `ME`, `NH`, `VT`, `CT`, `RI`, `SEMA`, `WCMA`, `NEMA` |
+| Audit columns | On every bronze table, carried into silver and gold | `ingested_at`, `ingested_by` |
+| dbt models | Header comment (purpose, grain, numbered steps); CTEs named after the step | `new_runs` |
+| Ingest scripts | Docstring (source, cadence, each run, writes to); Fetch → Shape → Write sections | |
+
+---
+
+## Security & Access
+
+Each workload runs as its own service account with access granted per dataset (`infra/iam.tf`). No workload has a project-wide data or admin role.
+
+| Service account | Runs | Access |
+|---|---|---|
+| `ingest-jobs` | Ingest jobs | Write `bronze`; read the source credential secrets |
+| `dbt-bigquery` | Transform job | Read `bronze`; write `silver` and `gold` |
+| `job-scheduler` | Cloud Scheduler | Start the Cloud Run jobs (`run.invoker` on each job) |
+| `github-deployer` | CI/CD (GitHub Actions) | Build, push, and `terraform apply` — broad by necessity, usable only from this repo's `main` branch |
+
+The data workloads also hold `bigquery.jobUser` (permission to run queries), which grants no data access on its own. Source credentials (the ISO-NE login, the EIA key) live in Secret Manager (`infra/secrets.tf`): Terraform owns the secrets, and the values are added by hand ([runbook](docs/runbook.md)).
+
+---
+
+## Cost
+
+Designed to cost $0–3/month ([0003](docs/decisions/0003-cost-guardrails.md)). The project shares a billing account (and so its free tiers) with mbta-reliability-analytics.
+
+- **Cadence:** weather and the transform run every 6 hours, on 1 vCPU each. Frequency is the main compute cost, so it's raised only when a source needs it.
+- **Incremental silver:** models over growing bronze read only new ingest runs, so query cost stays flat as history grows.
+- **Per-query limit:** `maximum_bytes_billed` of 10 GiB (~$0.06) on every dbt query (`transform/profiles.yml`). A query that would bill more fails before it runs, and the failure emails.
+- **Budget:** $5/month on the billing account, alerting at 50%, 90%, 100%, forecast 100%, 200%, and 400% ($20). Created with `gcloud billing budgets` (setup), outside Terraform, since the deployer has no billing access. It only alerts; there's no billing kill switch, which would stop ingest and lose data sources don't keep.
+- **No project-wide daily query quota.** The MBTA project found that one refuses queries far below its limit.
+
+---
+
+## Stack
+
+| Layer | Tool |
+|---|---|
+| Ingest | Python 3.13 (pandas, requests) on Cloud Run Jobs, triggered by Cloud Scheduler |
+| Warehouse | BigQuery (us-east1) |
+| Transform | dbt Core 1.12 + dbt-bigquery |
+| Infrastructure | Terraform 1.14 (Google provider 7.16), state in GCS |
+| CI/CD | GitHub Actions, Workload Identity Federation (no keys) |
+| Alerting | Cloud Monitoring log-based alert policies → email |
+
+---
+
+## Project Structure
+
+```
+.github/workflows/ci.yml   Checks on every push; deploy on main
+docs/                      Setup, runbook, roadmap, data source notes, decision records
+infra/                     Terraform: one file per resource family
+  bigquery.tf              Datasets and bronze table schemas (the one place they're defined)
+  cloud-run-jobs.tf        Ingest jobs (one per source) and the transform
+  cloud-scheduler.tf       Cron triggers
+  deploy.tf                GitHub → Google identity for CI (Workload Identity Federation)
+  monitoring.tf            Failure alert policies
+  secrets.tf               Source credentials (values added by hand)
+ingest/                    One shared image for every ingest job
+  common/run.py            What every run shares: job name, run timestamp, logging, failure reports
+  common/fetch.py          fetch(): HTTP GET that fails the job cleanly (step 1)
+  common/load.py           append_to_bronze(): load into bronze (step 3)
+  openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
+  tests/                   Job tests against canned API responses
+transform/                 dbt Core project
+  models/bronze/           Sources and freshness thresholds
+  models/silver/           <bronze table>__<step> models
+  macros/                  keep_latest_version, last_processed_run, dataset naming
+  run.py                   Transform entrypoint: dbt build, source freshness, failure report
+scripts/build-image.sh     Build and push a component image
+```
+
+---
+
+## Development & Deployment
+
+CI (`.github/workflows/ci.yml`) runs on every push and pull request without cloud credentials: ruff + pytest for the Python, `dbt parse` + sqlfluff for the SQL, and `terraform fmt` + `validate` for the infrastructure.
+
+```bash
+# Local environment (Python 3.13, as in the images; all components + dev tools)
+pip install -r requirements.txt
+
+# The same checks CI runs
+ruff check ingest transform && pytest                                  # Python
+(cd transform && dbt parse --profiles-dir . && sqlfluff lint models)   # SQL
+(cd infra && terraform fmt -check -recursive && terraform validate)    # Terraform
+
+# Run an ingest job locally. It writes to dev_bronze (same tables as bronze; rows
+# expire after 7 days), never production bronze (decision 0008). To write real
+# bronze, run the Cloud Run job instead (docs/runbook.md, "Run a job now").
+PYTHONPATH=ingest python ingest/openmeteo-forecast/main.py
+
+# Build/test dbt models locally (uses gcloud application-default credentials).
+# The local target reads the real bronze and writes to dev_silver / dev_gold.
+cd transform && dbt build --profiles-dir . --target local
+
+# Ship a change: merge to main — CI/CD builds, pushes, applies, and runs the
+# transform. To preview infra changes locally, plan against the deployed tag
+# (the variables give local credentials a quota project; see docs/setup.md):
+cd infra && USER_PROJECT_OVERRIDE=true GOOGLE_BILLING_PROJECT=new-england-grid-analytics \
+  terraform plan -var image_tag=$(git rev-parse --short=12 origin/main)
+```
+
+### Continuous deployment
+
+A push to `main` that passes CI deploys automatically (`deploy` job in `.github/workflows/ci.yml`):
+
+1. Build the `ingest` and `transform` images and tag each with the commit (first 12 characters of the SHA)
+2. `terraform apply -var image_tag=<commit>` — every job moves to that commit's images
+3. Run the transform once, so model changes are live immediately
+
+GitHub authenticates to Google with **Workload Identity Federation**: a short-lived OIDC token exchanged for the `github-deployer` service account, so no keys exist anywhere. Only workflow runs on this repository's `main` branch are accepted (`infra/deploy.tf`). Rolling back is re-running the deploy for an earlier commit; Artifact Registry keeps the 5 most recent images.
+
+The deploy identity can't create itself, so the first apply runs once from a workstation ([0005](docs/decisions/0005-deploy-only-through-ci.md)); every apply after it runs in CI. The steps are in [setup.md](docs/setup.md#bootstrap-once-per-project).
+
+### Terraform state
+
+State lives in the GCS bucket `new-england-grid-analytics-tfstate` (versioned, 30-day history; `infra/cloud-storage.tf`), configured as the backend in `infra/main.tf`. The bucket is itself managed by Terraform, so it's bootstrapped with local state first and then migrated ([setup.md](docs/setup.md#bootstrap-once-per-project)). After that, `terraform init` in `infra/` is all a new machine needs (with `gcloud auth application-default login`).

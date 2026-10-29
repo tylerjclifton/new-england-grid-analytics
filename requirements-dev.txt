@@ -1,0 +1,9 @@
+# Dev tooling, pinned in one place: used by requirements.txt (local) and by CI
+# (.github/workflows/ci.yml), so local checks and CI run the same versions.
+
+# Linting (config: pyproject.toml, transform/.sqlfluff)
+ruff==0.17.2
+sqlfluff==4.4.0
+
+# Testing (config: pyproject.toml)
+pytest==9.1.1
