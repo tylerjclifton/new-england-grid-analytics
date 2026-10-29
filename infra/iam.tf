@@ -82,15 +82,16 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_transform" {
 # ── Google service agents ─────────────────────────────────────────────────────
 # Google grants these when an API is enabled; they're kept here so Terraform
 # documents (and would restore) them. Removing one breaks its service.
+#
+# Older projects (e.g. mbta-reliability-analytics) also have the Google APIs
+# service agent (<number>@cloudservices) with Editor. This project, created in
+# 2026, has no such agent, so it isn't granted anything here.
 
 locals {
   service_agent_roles = {
     cloud_run         = { member = "serviceAccount:${var.default_sa_cloud_run}", role = "roles/run.serviceAgent" }
     artifact_registry = { member = "serviceAccount:${var.default_sa_artifact_registry}", role = "roles/artifactregistry.serviceAgent" }
     cloud_scheduler   = { member = "serviceAccount:${var.default_sa_cloud_scheduler}", role = "roles/cloudscheduler.serviceAgent" }
-    # Google APIs service agent: Editor is Google's default for project-level
-    # automation (e.g. creating managed resources); not used by our workloads
-    google_apis = { member = "serviceAccount:${var.default_sa_google_apis}", role = "roles/editor" }
   }
 }
 

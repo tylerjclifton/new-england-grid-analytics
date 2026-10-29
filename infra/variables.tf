@@ -69,12 +69,6 @@ variable "alert_email" {
 # ── Google service agents ─────────────────────────────────────────────────────
 # Project-number-specific (987931704118); granted by Google, documented in iam.tf
 
-variable "default_sa_google_apis" {
-  description = "Google APIs Service Agent"
-  type        = string
-  default     = "987931704118@cloudservices.gserviceaccount.com"
-}
-
 variable "default_sa_artifact_registry" {
   description = "Artifact Registry Service Agent"
   type        = string
