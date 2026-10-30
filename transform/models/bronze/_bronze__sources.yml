@@ -1,0 +1,33 @@
+version: 2
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Bronze — append-only raw history
+#
+# Tables are created by Terraform (infra/bigquery.tf) and written only by ingest
+# jobs (ingest/<source>-<entity>/). dbt reads them as sources and never writes
+# to them. Each ingest run appends what it saw; silver decides which version
+# of a record to use.
+#
+# Freshness: `dbt source freshness` (run after `dbt build` in the transform
+# job) fails the run when a table hasn't been written for longer than its ingest
+# schedule allows — i.e. when an ingest job has stopped working.
+# ══════════════════════════════════════════════════════════════════════════════
+
+sources:
+  - name: bronze
+    schema: bronze
+    config:
+      loaded_at_field: ingested_at
+
+    tables:
+      - name: openmeteo_forecast
+        description: >
+          Open-Meteo hourly forecasts, one point per ISO-NE load zone, in source
+          (metric) units. Every run is kept: hours ahead are what was forecast
+          at ingested_at; past hours are the model's best estimate.
+          Grain: load zone × hour × ingest run.
+        config:
+          freshness:
+            # Every 6 hours; the slack covers one failed run
+            warn_after: {count: 7, period: hour}
+            error_after: {count: 13, period: hour}

@@ -1,0 +1,101 @@
+version: 2
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Silver — every model is <bronze table>__<step>, so each source's models
+# sort together and the name says what the model is (decision 0007)
+#
+#   __base     the cleaned copy: renamed, typed, converted, no business rules.
+#              A view. For most sources it's the latest version of each record;
+#              for forecasts every version is a record (decision 0009).
+#   __<step>   one step, named for what it produces, built from __base or
+#              earlier steps. Views, unless they sit on a growing bronze table:
+#              those are incremental tables (decision 0003).
+#
+# Tests run in `dbt build` before gold is rebuilt; an error-severity failure
+# skips everything downstream, so bad data never reaches gold. Tests go on
+# tables, not on views over all of bronze, so they don't rescan it every run.
+#   unique_combination / not_null  → the model's grain holds
+#   accepted_values                → keys join cleanly across sources
+#   accepted_range                 → values are physically plausible
+# ══════════════════════════════════════════════════════════════════════════════
+
+models:
+
+  # ── Weather ─────────────────────────────────────────────────────────────────
+
+  - name: openmeteo_forecast__base
+    description: >
+      Every Open-Meteo forecast run, one row per load zone × hour × run, in grid
+      units. No tests: they would scan all of bronze (see header).
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone the weather point represents.
+      - name: hour_at
+        description: Hour the values are for (UTC). Precipitation, snowfall, and irradiance cover the hour ending here.
+      - name: lead_hours
+        description: Hours from the ingest run to hour_at; ≤ 0 means a best estimate after the fact, not a forecast.
+      - name: ingested_at
+        description: The ingest run (UTC), effectively when the forecast was issued.
+
+  - name: openmeteo_forecast__latest
+    description: >
+      The newest value for each load zone × hour: best estimate for past hours,
+      latest forecast for future ones. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [load_zone, hour_at]
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone the weather point represents.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: location_name
+        description: City the point is placed at.
+      - name: hour_at
+        description: Hour the values are for (UTC).
+        data_tests: [not_null]
+      - name: lead_hours
+        description: Hours from the newest run to hour_at; ≤ 0 means a best estimate after the fact.
+      - name: temperature_f
+        description: Air temperature at 2 m, °F.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: -50
+                max_value: 120
+      - name: dew_point_f
+        description: Dew point at 2 m, °F.
+      - name: cloud_cover_pct
+        description: Total cloud cover, %.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: solar_irradiance_w_m2
+        description: Global horizontal irradiance, W/m², mean over the hour ending at hour_at.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1400
+      - name: wind_speed_10m_ms
+        description: Wind speed at 10 m, m/s.
+      - name: wind_speed_100m_ms
+        description: Wind speed at 100 m (turbine hub height), m/s.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: precipitation_mm
+        description: Total precipitation over the hour ending at hour_at, mm.
+      - name: snowfall_cm
+        description: Snowfall over the hour ending at hour_at, cm.
+      - name: ingested_at
+        description: The ingest run this hour's values came from (UTC).
+        data_tests: [not_null]
