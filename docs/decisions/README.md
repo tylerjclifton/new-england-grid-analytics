@@ -14,6 +14,8 @@ One short file per decision that shaped this project: the situation, what was de
 | [0008](0008-local-ingest-writes-dev-bronze.md) | Local ingest runs write to `dev_bronze`, never production bronze | Accepted |
 | [0009](0009-weather-per-load-zone.md) | Weather: Open-Meteo forecasts, one point per load zone, every run kept | Accepted |
 | [0010](0010-isone-day-files.md) | ISO-NE: whole-day pulls (yesterday and today) every 6 hours; source field names in bronze | Accepted |
+| [0011](0011-bronze-schemas-in-terraform.md) | Bronze schemas are owned by Terraform; silver and gold by dbt | Accepted |
+| [0012](0012-isone-prices.md) | ISO-NE prices: five-minute real-time (preliminary, then final) and hourly day-ahead, at the Hub and eight load zones | Accepted |
 
 **Adding one:** copy the shape of an existing file, take the next number, add a row here.
 

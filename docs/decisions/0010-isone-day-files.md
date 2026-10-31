@@ -24,3 +24,5 @@ ISO-NE's web services API ([data-sources.md](../data-sources.md#iso-ne-web-servi
 - **Duplication is deliberate:** a record appears once per run that saw it (up to ~8 times). That is what lets silver see revisions; `__latest` models collapse it.
 - **Backfill** is the same job with a larger `LOOKBACK_DAYS` (one call per feed per day), to be sized before it runs: about 2,000 days of fuel mix, about 900 of load.
 - **Rooftop solar** needs no estimate of our own to start with: measured and solar-adjusted demand both come from ISO-NE.
+
+**2026-10-31 — zonal load added the same way.** `/fiveminuteestimatedzonalload/day/{day}` → `isone-zonal-load` → `bronze.isone_zonal_load`: 288 intervals × 8 zones a day, each with estimated load and a rooftop solar estimate; the zones add up to system native load and the system solar estimate. It nests records three levels deep and uses snake_case names (`interval_begin_date`), so `records()` unwraps any depth and `to_frame()` takes the time column's name. History reaches back to about 2025. ~3,500 rows per run, ~400 MB a year.

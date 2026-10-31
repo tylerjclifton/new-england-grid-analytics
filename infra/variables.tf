@@ -54,7 +54,7 @@ variable "weather_forecast_ingestion_schedule" {
 }
 
 variable "isone_ingestion_schedule" {
-  description = "Cron for the ISO-NE ingest jobs (fuel mix, system load). Every 6 hours at :10; each run pulls every interval for yesterday and today, so the cadence sets latency, not completeness (decision 0010)."
+  description = "Cron for the ISO-NE ingest jobs (fuel mix, load, prices). Every 6 hours at :10; each run pulls whole days, so the cadence sets latency, not completeness (decisions 0010, 0012)."
   type        = string
   default     = "10 */6 * * *"
 }

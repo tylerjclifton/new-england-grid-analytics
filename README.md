@@ -4,7 +4,7 @@ A data engineering and modeling project on the New England electric grid: what i
 
 **Docs:** [setup on a new machine](docs/setup.md) · [runbook](docs/runbook.md) · [decision records](docs/decisions/README.md) · [roadmap](docs/roadmap.md) · [data source notes](docs/data-sources.md)
 
-**Status:** weather, plus ISO-NE generation by fuel and system load, are ingesting; ISO-NE prices and EIA history are next ([roadmap](docs/roadmap.md)).
+**Status:** weather and ISO-NE generation by fuel, load (system and per zone), and prices (real-time and day-ahead) are ingesting; history backfills and the first gold table are next ([roadmap](docs/roadmap.md)).
 
 ---
 
@@ -15,6 +15,9 @@ A data engineering and modeling project on the New England electric grid: what i
 | Open-Meteo forecast API | Hourly weather for one point per ISO-NE load zone: temperature, dew point, cloud cover, solar irradiance, wind at 10 m and 100 m, precipitation, snowfall | Every 6 hours | Yesterday's best estimate plus the 7-day forecast (snapshot; every run kept) |
 | ISO-NE web services | Generation by fuel: MW per fuel every few minutes, and which fuel is setting the price | Every 6 hours | Every snapshot for yesterday and today ([0010](docs/decisions/0010-isone-day-files.md)) |
 | ISO-NE web services | Five-minute system load, plus ISO-NE's rooftop solar estimate | Every 6 hours | Every interval for yesterday and today |
+| ISO-NE web services | Five-minute load per load zone, with each zone's rooftop solar estimate | Every 6 hours | Every interval for yesterday and today |
+| ISO-NE web services | Five-minute real-time prices at the Hub and eight load zones (energy, congestion, losses) | Every 6 hours | Preliminary prices for yesterday and today; final prices for 2–3 days ago ([0012](docs/decisions/0012-isone-prices.md)) |
+| ISO-NE web services | Hourly day-ahead prices at the Hub and eight load zones | Every 6 hours | Today and tomorrow (tomorrow once the market clears, around midday) |
 
 The dbt transform runs every 6 hours, after the ingest runs.
 
@@ -47,6 +50,9 @@ Each layer is its own BigQuery dataset.
 | `openmeteo_forecast` | load zone × hour × ingest run | ~1,500 rows per run, ~300 MB/year: every forecast run is kept, so any hour has every forecast made of it ([0009](docs/decisions/0009-weather-per-load-zone.md)) |
 | `isone_fuel_mix` | snapshot × fuel × ingest run | ~3,000 rows per run, ~330 MB/year: each run re-pulls yesterday and today, so revisions are kept ([0010](docs/decisions/0010-isone-day-files.md)) |
 | `isone_system_load` | five-minute interval × ingest run | ~430 rows per run, ~50 MB/year |
+| `isone_zonal_load` | five-minute interval × load zone × ingest run | ~3,500 rows per run, ~400 MB/year |
+| `isone_rt_lmp` | five-minute interval × location × version (prelim/final) × ingest run | ~9,900 rows per run, ~1.5 GB/year: the largest table ([0012](docs/decisions/0012-isone-prices.md)) |
+| `isone_da_lmp` | hour × location × ingest run | ~440 rows per run, ~65 MB/year |
 
 | Silver model | Grain | What it produces |
 |---|---|---|
@@ -144,10 +150,13 @@ ingest/                    One shared image for every ingest job
   common/run.py            What every run shares: job name, run timestamp, logging, failure reports
   common/fetch.py          fetch(): HTTP GET that fails the job cleanly (step 1)
   common/load.py           append_to_bronze(): load into bronze (step 3)
-  common/isone.py          ISO-NE API: login, days to pull, response unwrapping
+  common/isone.py          ISO-NE API: login, days and pricing locations to pull, response unwrapping
   openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
   isone-fuel-mix/          ISO-NE generation by fuel (every 6 hours)
   isone-system-load/       ISO-NE five-minute system load (every 6 hours)
+  isone-zonal-load/        ISO-NE five-minute load per load zone (every 6 hours)
+  isone-rt-lmp/            ISO-NE five-minute real-time prices, prelim and final (every 6 hours)
+  isone-da-lmp/            ISO-NE hourly day-ahead prices (every 6 hours)
   tests/                   Job tests against canned API responses
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds

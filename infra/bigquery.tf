@@ -30,6 +30,19 @@ locals {
   # How long local test data lives in the dev sandboxes
   dev_retention_ms = 7 * 24 * 60 * 60 * 1000
 
+  # The fields every ISO-NE price record has (both price tables); the nested
+  # Location is flattened into LocId / LocType / LocName by the ingest
+  isone_lmp_columns = [
+    { name = "BeginDate", type = "TIMESTAMP", description = "Start of the interval the price is for (UTC; ISO-NE sends Eastern time with its offset)" },
+    { name = "LocId", type = "INTEGER", description = "Pricing location ID: 4000 the Hub, 4001–4008 the load zones" },
+    { name = "LocType", type = "STRING", description = "Location type: HUB or LOAD ZONE" },
+    { name = "LocName", type = "STRING", description = "Location name, e.g. .H.INTERNAL_HUB, .Z.MAINE" },
+    { name = "LmpTotal", type = "FLOAT", description = "Locational marginal price, $/MWh: EnergyComponent + CongestionComponent + LossComponent" },
+    { name = "EnergyComponent", type = "FLOAT", description = "Energy component, $/MWh (the same everywhere in New England)" },
+    { name = "CongestionComponent", type = "FLOAT", description = "Congestion component, $/MWh (nonzero when transmission limits bind)" },
+    { name = "LossComponent", type = "FLOAT", description = "Marginal loss component, $/MWh" },
+  ]
+
   # One entry per bronze table. Column names follow the source system; renaming
   # to project conventions happens in silver.
   bronze_tables = {
@@ -77,6 +90,32 @@ locals {
         { name = "SystemLoadBtmPv", type = "FLOAT", description = "LoadMw plus ISO-NE's behind-the-meter solar estimate, MW (equal to LoadMw after dark)" },
         { name = "NativeLoadBtmPv", type = "FLOAT", description = "NativeLoad plus ISO-NE's behind-the-meter solar estimate, MW" },
       ]
+    }
+
+    isone_zonal_load = {
+      description = "ISO-NE five-minute estimated load per load zone (decision 0010), with each zone's behind-the-meter (rooftop) solar estimate. The zones add up to system native load, and their solar to the system estimate. Each run re-pulls yesterday and today. Grain: five-minute interval × load zone × ingest run."
+      clustering  = ["load_zone_id", "interval_begin_date"]
+      columns = [
+        { name = "interval_begin_date", type = "TIMESTAMP", description = "Start of the five-minute interval (UTC; ISO-NE sends Eastern time with its offset)" },
+        { name = "load_zone_id", type = "INTEGER", description = "ISO-NE load zone location ID, 4001–4008 (same IDs as the price feeds' LocId)" },
+        { name = "load_zone_name", type = "STRING", description = "ISO-NE load zone name, e.g. .Z.NEMASSBOST" },
+        { name = "estimated_load_mw", type = "FLOAT", description = "Estimated load in the zone, MW (the zones add up to system native load)" },
+        { name = "estimated_btm_pv_mw", type = "FLOAT", description = "Estimated behind-the-meter (rooftop) solar in the zone, MW" },
+      ]
+    }
+
+    isone_rt_lmp = {
+      description = "ISO-NE five-minute real-time prices (LMPs) at the Hub and the eight load zones (decision 0012). Preliminary prices for yesterday and today, final prices for 2 and 3 days ago; LmpType says which. Grain: five-minute interval × location × version × ingest run."
+      clustering  = ["LocId", "BeginDate"]
+      columns = concat(local.isone_lmp_columns, [
+        { name = "LmpType", type = "STRING", description = "Which version of the price: prelim (published within minutes) or final (about a day later); set by the ingest from the feed it called" },
+      ])
+    }
+
+    isone_da_lmp = {
+      description = "ISO-NE hourly day-ahead prices (LMPs) at the Hub and the eight load zones (decision 0012): the market's forecast of real-time prices, final when published (around midday the day before). Each run pulls today and tomorrow. Grain: hour × location × ingest run."
+      clustering  = ["LocId", "BeginDate"]
+      columns     = local.isone_lmp_columns
     }
   }
 }

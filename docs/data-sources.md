@@ -12,6 +12,8 @@ ISO New England's REST API, `https://webservices.iso-ne.com/api/v1.1/`. Docs are
 - **Time:** Eastern time with its offset (`2026-10-30T12:00:00.000-04:00`), exact through DST.
 - **Checked 2026-10-31** with the project's login:
   - **Fuel mix:** irregular snapshots, ~200 a day, one record per fuel running (`BeginDate`, `FuelCategory`, `FuelCategoryRollup`, `GenMw`, `MarginalFlag`). A fuel that isn't running is absent, not 0. Day files reach back to about 2020.
+  - **Zonal load:** 288 intervals × 8 zones a day (`interval_begin_date`, `load_zone_id`, `load_zone_name`, `estimated_load_mw`, `estimated_btm_pv_mw`), nested three levels deep, in snake_case. Zones add up to system native load, and their rooftop solar to the system estimate; at noon on 2026-10-30 rooftop solar exceeded grid load in WCMA (1,086 vs. 678 MW). Day files reach back to about 2025.
+  - **Prices:** ~1,300 locations (`/locations/all`); the Hub is 4000 and the load zones 4001–4008. Records nest the location (`"Location": {"@LocId": "4000", "@LocType": "HUB", "$": ".H.INTERNAL_HUB"}`) beside `LmpTotal`, `EnergyComponent`, `CongestionComponent`, `LossComponent`. Real-time finals lag about a day (Oct 29 final on Oct 31, Oct 30 not yet); preliminary five-minute data can have gaps (271 of 288 intervals on Oct 20); the hourly real-time price is the mean of the five-minute prices. Day-ahead prices for tomorrow are out by evening ([0012](decisions/0012-isone-prices.md)).
   - **System load:** 288 five-minute intervals a day (`LoadMw`, `NativeLoad`, `ArdDemand`, `SystemLoadBtmPv`, `NativeLoadBtmPv`). `SystemLoadBtmPv` adds ISO-NE's behind-the-meter (rooftop) solar estimate: 9,483 MW measured vs. 14,051 MW with rooftop solar at noon on 2026-10-30. Day files reach back to about 2024.
 
 Feeds relevant to the roadmap (of ~440 endpoints):
@@ -20,9 +22,9 @@ Feeds relevant to the roadmap (of ~440 endpoints):
 |---|---|---|
 | Generation by fuel | `/genfuelmix/day/{day}` | What's burning: gas, nuclear, hydro, wind, solar, oil, … (ingested: `bronze.isone_fuel_mix`) |
 | System load | `/fiveminutesystemload/day/{day}`, `/hourlysysload/day/{day}` | Demand, with a rooftop solar estimate (five-minute ingested: `bronze.isone_system_load`) |
-| Zonal load | `/fiveminuteestimatedzonalload/day/{day}` | Demand per load zone (matches the weather points) |
-| Real-time prices | `/fiveminutelmp/{Type}/day/{day}/location/{locationId}`, `/hourlylmp/rt/{prelim,final}/day/{day}` | Prices; prelim values are replaced by final ones |
-| Day-ahead prices | `/hourlylmp/da/final/day/{day}` | The market's forecast of real-time prices |
+| Zonal load | `/fiveminuteestimatedzonalload/day/{day}` | Demand and rooftop solar per load zone, matching the weather points (ingested: `bronze.isone_zonal_load`) |
+| Real-time prices | `/fiveminutelmp/{prelim,final}/day/{day}/location/{locationId}`, `/hourlylmp/rt/{prelim,final}/day/{day}` | Prices; prelim values are replaced by final ones (five-minute ingested: `bronze.isone_rt_lmp`) |
+| Day-ahead prices | `/hourlylmp/da/final/day/{day}[/location/{locationId}]` | The market's forecast of real-time prices (ingested: `bronze.isone_da_lmp`) |
 | Load forecasts | `/hourlyloadforecast/day/{day}`, `/sevendayforecast/day/{day}`, `/reliabilityregionloadforecast/day/{day}` | ISO-NE's own forecasts: the modeling benchmark |
 | Wind forecast | `/sevendaywindpowerforecast/day/{day}` | |
 | Interchange | `/actualinterchange/day/{day}`, `/fiveminuteexternalflow/day/{day}` | Imports from Quebec, New York, New Brunswick |

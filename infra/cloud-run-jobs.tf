@@ -42,6 +42,27 @@ locals {
       secrets  = local.isone_login
       env      = {}
     }
+    "isone-zonal-load" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # One request per day (yesterday and today)
+      secrets  = local.isone_login
+      env      = {}
+    }
+    "isone-rt-lmp" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # 36 requests (2 versions × 2 days × 9 locations), ~10 s
+      secrets  = local.isone_login
+      env      = {}
+    }
+    "isone-da-lmp" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # 18 requests (2 days × 9 locations)
+      secrets  = local.isone_login
+      env      = {}
+    }
   }
 
   # The ISO Express login every ISO-NE job reads (ingest/common/isone.py)

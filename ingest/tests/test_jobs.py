@@ -188,3 +188,101 @@ def test_system_load_keeps_every_measure_as_float(run_job, isone_login):
     assert (df.drop(columns='BeginDate').dtypes == 'float64').all()
     # Rooftop solar is the gap between the two loads
     assert df['SystemLoadBtmPv'].iloc[0] - df['LoadMw'].iloc[0] == pytest.approx(4568, abs=1)
+
+
+def lmp_day(*begins, location_id=4000, location_type='HUB', location_name='.H.INTERNAL_HUB', wrapper='FiveMinLmps'):
+    """A price response (/fiveminutelmp or /hourlylmp) for one location, one record per BeginDate."""
+    record_key = {'FiveMinLmps': 'FiveMinLmp', 'HourlyLmps': 'HourlyLmp'}[wrapper]
+    return {wrapper: {record_key: [
+        {'BeginDate': begin,
+         'Location': {'@LocId': str(location_id), '@LocType': location_type, '$': location_name},
+         'LmpTotal': 31.75, 'EnergyComponent': 31.33, 'CongestionComponent': 0.05, 'LossComponent': 0.37}
+        for begin in begins
+    ]}}
+
+
+def test_isone_records_unwrap_three_levels_and_empty_days():
+    """The zonal load feed nests one level deeper than the others, and is empty as {"isone_web_services": {}}."""
+    from common.isone import records
+
+    assert records({'a': {'b': {'c': [{'x': 1}, {'x': 2}]}}}) == [{'x': 1}, {'x': 2}]
+    assert records({'isone_web_services': {}}) == []
+    assert records({'a': {'b': {'x': 1, 'y': 2}}}) == [{'x': 1, 'y': 2}]
+
+
+def test_isone_flatten_location():
+    from common.isone import flatten_location
+
+    record = lmp_day('2026-10-30T00:00:00.000-04:00')['FiveMinLmps']['FiveMinLmp'][0]
+    flat = flatten_location(record)
+
+    assert 'Location' not in flat
+    assert (flat['LocId'], flat['LocType'], flat['LocName']) == (4000, 'HUB', '.H.INTERNAL_HUB')
+
+
+def test_rt_lmp_pulls_prelim_recent_days_and_final_older_days(run_job, isone_login):
+    from common.isone import PRICING_LOCATIONS
+
+    calls = 2 * 2 * len(PRICING_LOCATIONS)  # 2 versions × 2 days × locations
+    df = run_job('isone-rt-lmp', [lmp_day('2026-10-30T12:00:00.000-04:00')] * calls)
+
+    urls = [request['url'] for request in run_job.requests]
+    assert len(urls) == calls
+    assert sum('/fiveminutelmp/prelim/day/' in url for url in urls) == calls // 2
+    assert sum('/fiveminutelmp/final/day/' in url for url in urls) == calls // 2
+    assert {url.split('/location/')[1].removesuffix('.json') for url in urls} == {str(id) for id in PRICING_LOCATIONS}
+
+    # The prelim and final windows never share a day
+    prelim_days = {url.split('/day/')[1].split('/')[0] for url in urls if '/prelim/' in url}
+    final_days  = {url.split('/day/')[1].split('/')[0] for url in urls if '/final/' in url}
+    assert prelim_days.isdisjoint(final_days) and max(final_days) < min(prelim_days)
+
+    assert sorted(df['LmpType'].unique()) == ['final', 'prelim']
+    assert list(df.columns[:4]) == ['BeginDate', 'LocId', 'LocType', 'LocName']
+    assert df['LmpTotal'].dtype == 'float64'
+    assert str(df['BeginDate'].dt.tz) == 'UTC'
+
+
+def test_rt_lmp_empty_final_days_still_load_prelim(run_job, isone_login):
+    """Finals not published yet: prelim rows still load."""
+    from common.isone import PRICING_LOCATIONS
+
+    per_type = 2 * len(PRICING_LOCATIONS)
+    df = run_job('isone-rt-lmp', [lmp_day('2026-10-30T12:00:00.000-04:00')] * per_type
+                                 + [{'FiveMinLmps': {}}] * per_type)
+
+    assert set(df['LmpType']) == {'prelim'}
+    assert len(df) == per_type
+
+
+def test_da_lmp_pulls_today_and_tomorrow(run_job, isone_login):
+    from common.isone import PRICING_LOCATIONS
+
+    calls = 2 * len(PRICING_LOCATIONS)
+    df = run_job('isone-da-lmp', [lmp_day('2026-11-01T00:00:00.000-04:00', wrapper='HourlyLmps')] * calls)
+
+    urls = [request['url'] for request in run_job.requests]
+    assert len(urls) == calls
+    assert all('/hourlylmp/da/final/day/' in url for url in urls)
+    days = sorted({url.split('/day/')[1].split('/')[0] for url in urls})
+    assert len(days) == 2 and pd.Timestamp(days[1]) - pd.Timestamp(days[0]) == pd.Timedelta(days=1)
+    assert len(df) == calls
+
+
+def zonal_load_day(*begins):
+    """A /fiveminuteestimatedzonalload/day response: every zone at each interval."""
+    return {'isone_web_services': {'five_min_estimated_zonal_loads': {'five_min_estimated_zonal_load': [
+        {'interval_begin_date': begin, 'load_zone_id': 4000 + index, 'load_zone_name': f'.Z.ZONE{index}',
+         'estimated_load_mw': 1000.5, 'estimated_btm_pv_mw': 250}
+        for begin in begins for index in range(1, 9)
+    ]}}}
+
+
+def test_zonal_load_one_row_per_interval_per_zone(run_job, isone_login):
+    df = run_job('isone-zonal-load', [zonal_load_day('2026-10-30T12:00:00.000-04:00'), {'isone_web_services': {}}])
+
+    assert len(df) == 8
+    assert not df.duplicated(['interval_begin_date', 'load_zone_id']).any()
+    assert df['load_zone_id'].dtype == 'int64'
+    assert df['estimated_btm_pv_mw'].dtype == 'float64'
+    assert df['interval_begin_date'].iloc[0] == pd.Timestamp('2026-10-30T16:00', tz='UTC')

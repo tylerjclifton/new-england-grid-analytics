@@ -20,6 +20,9 @@ This lands under the `global` resource, not `cloud_run_job`, so it doesn't match
 gcloud run jobs execute ingest-openmeteo-forecast --region=us-east1 --wait
 gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --wait
 gcloud run jobs execute ingest-isone-system-load --region=us-east1 --wait
+gcloud run jobs execute ingest-isone-zonal-load --region=us-east1 --wait
+gcloud run jobs execute ingest-isone-rt-lmp --region=us-east1 --wait
+gcloud run jobs execute ingest-isone-da-lmp --region=us-east1 --wait
 gcloud run jobs execute transform --region=us-east1 --wait
 ```
 
