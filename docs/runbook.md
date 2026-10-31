@@ -18,10 +18,18 @@ This lands under the `global` resource, not `cloud_run_job`, so it doesn't match
 
 ```bash
 gcloud run jobs execute ingest-openmeteo-forecast --region=us-east1 --wait
+gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --wait
+gcloud run jobs execute ingest-isone-system-load --region=us-east1 --wait
 gcloud run jobs execute transform --region=us-east1 --wait
 ```
 
-This writes to production bronze. A local run (`PYTHONPATH=ingest python ingest/<job>/main.py`) writes to `dev_bronze` instead ([0008](decisions/0008-local-ingest-writes-dev-bronze.md)).
+This writes to production bronze. A local run (`PYTHONPATH=ingest python ingest/<job>/main.py`) writes to `dev_bronze` instead ([0008](decisions/0008-local-ingest-writes-dev-bronze.md)). ISO-NE jobs also need the login in the environment; read it from Secret Manager for that one command, so it isn't saved anywhere:
+
+```bash
+ISONE_WS_USERNAME=$(gcloud secrets versions access latest --secret=isone-ws-username) \
+ISONE_WS_PASSWORD=$(gcloud secrets versions access latest --secret=isone-ws-password) \
+PYTHONPATH=ingest python ingest/isone-fuel-mix/main.py
+```
 
 ## Add or rotate a source credential
 

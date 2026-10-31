@@ -53,6 +53,31 @@ locals {
         { name = "snowfall", type = "FLOAT", description = "Snowfall, cm, preceding hour" },
       ]
     }
+
+    isone_fuel_mix = {
+      description = "ISO-NE generation by fuel (decision 0010): snapshots published every few minutes at irregular times, each listing MW per fuel running at that moment. A fuel not running is absent from a snapshot, not 0. Each run re-pulls yesterday and today, so a snapshot appears once per run that saw it. Grain: snapshot × fuel × ingest run."
+      clustering  = ["FuelCategory", "BeginDate"]
+      columns = [
+        { name = "BeginDate", type = "TIMESTAMP", description = "When the snapshot was taken (UTC; ISO-NE sends Eastern time with its offset)" },
+        { name = "FuelCategory", type = "STRING", description = "Fuel, e.g. Natural Gas, Nuclear, Hydro, Wind, Solar, Oil, Wood, Refuse, Landfill Gas, Batteries, Other" },
+        { name = "FuelCategoryRollup", type = "STRING", description = "ISO-NE's grouping of FuelCategory (Wind, Solar, Wood, Refuse and Landfill Gas roll up to Renewables)" },
+        { name = "GenMw", type = "FLOAT", description = "Generation from this fuel at BeginDate, MW" },
+        { name = "MarginalFlag", type = "STRING", description = "Y if this fuel was marginal (setting the real-time price) at BeginDate, else N" },
+      ]
+    }
+
+    isone_system_load = {
+      description = "ISO-NE five-minute system load (decision 0010), with ISO-NE's estimate of behind-the-meter (rooftop) solar, which the grid never sees. Each run re-pulls yesterday and today, so an interval appears once per run that saw it. Grain: five-minute interval × ingest run."
+      clustering  = ["BeginDate"]
+      columns = [
+        { name = "BeginDate", type = "TIMESTAMP", description = "Start of the five-minute interval (UTC; ISO-NE sends Eastern time with its offset)" },
+        { name = "LoadMw", type = "FLOAT", description = "ISO-NE system load, MW: everything the grid serves" },
+        { name = "NativeLoad", type = "FLOAT", description = "LoadMw less ArdDemand, MW" },
+        { name = "ArdDemand", type = "FLOAT", description = "Asset-related demand, MW: pumped storage pumping and batteries charging" },
+        { name = "SystemLoadBtmPv", type = "FLOAT", description = "LoadMw plus ISO-NE's behind-the-meter solar estimate, MW (equal to LoadMw after dark)" },
+        { name = "NativeLoadBtmPv", type = "FLOAT", description = "NativeLoad plus ISO-NE's behind-the-meter solar estimate, MW" },
+      ]
+    }
   }
 }
 

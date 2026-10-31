@@ -3,7 +3,8 @@ Step 1 of every ingest job: fetch from the source.
 
 fetch() is a plain HTTP GET that turns a network error or a non-200 response
 into a failed job (with a failure report, see common/run.py) instead of an
-exception the job has to handle.
+exception the job has to handle. Sources that need a login pass `auth`
+(HTTP basic auth, e.g. ISO-NE through common/isone.py).
 """
 
 # Import third party libraries
@@ -13,10 +14,10 @@ import requests
 from common.run import fail
 
 
-def fetch(url, params=None, headers=None, timeout=60):
+def fetch(url, params=None, headers=None, auth=None, timeout=60):
     """GET a URL, exiting the job on a network error or non-200 response."""
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=timeout)
+        response = requests.get(url, params=params, headers=headers, auth=auth, timeout=timeout)
     except requests.exceptions.RequestException as error:
         fail(f"Request to {url} failed: {error}")
 

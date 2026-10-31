@@ -38,7 +38,8 @@ variable "github_repository" {
 
 # ── Schedules ─────────────────────────────────────────────────────────────────
 # Cadence is a cost decision (decision 0003): a run every 6 hours captures each
-# major weather model update, and the transform only needs to follow it.
+# major weather model update; ISO-NE runs pull whole days, so they lose nothing
+# by running as rarely (decision 0010); the transform only needs to follow them.
 
 variable "scheduler_time_zone" {
   description = "Cloud Scheduler time zone for cron jobs"
@@ -52,8 +53,14 @@ variable "weather_forecast_ingestion_schedule" {
   default     = "5 */6 * * *"
 }
 
+variable "isone_ingestion_schedule" {
+  description = "Cron for the ISO-NE ingest jobs (fuel mix, system load). Every 6 hours at :10; each run pulls every interval for yesterday and today, so the cadence sets latency, not completeness (decision 0010)."
+  type        = string
+  default     = "10 */6 * * *"
+}
+
 variable "transform_schedule" {
-  description = "Cron for the dbt transform job. Every 6 hours at :20, just after the weather snapshot."
+  description = "Cron for the dbt transform job. Every 6 hours at :20, just after the weather and ISO-NE runs."
   type        = string
   default     = "20 */6 * * *"
 }

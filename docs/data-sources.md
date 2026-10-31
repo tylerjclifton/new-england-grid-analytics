@@ -6,16 +6,20 @@ What each source offers, how to reach it, and what exploration found. Facts here
 
 ISO New England's REST API, `https://webservices.iso-ne.com/api/v1.1/`. Docs are public at `https://webservices.iso-ne.com/docs/v1.1/` (checked 2026-10-29).
 
-- **Access:** HTTP basic auth with an ISO Express account; an unauthenticated call returns 401. The login goes in the `isone-ws-username` / `isone-ws-password` secrets ([runbook](runbook.md#add-or-rotate-a-source-credential)).
+- **Access:** HTTP basic auth with an ISO Express account (the account is the API access; no separate request); an unauthenticated call returns 401. The login goes in the `isone-ws-username` / `isone-ws-password` secrets ([runbook](runbook.md#add-or-rotate-a-source-credential)).
 - **The public ISO Express CSV downloads** (`iso-ne.com/transform/csv/...`) return 403 to scripts, so the API is the only route for a pipeline.
-- **Shape:** most feeds offer `/current` and `/day/{day}` (YYYYMMDD), so a backfill is one call per feed per day, and a scheduled run can ask for today and yesterday and keep what's new.
+- **Shape:** most feeds offer `/current` and `/day/{day}` (YYYYMMDD, an Eastern day), so a backfill is one call per feed per day, and a scheduled run asks for yesterday and today ([0010](decisions/0010-isone-day-files.md)). Add `.json` for JSON (XML otherwise). Records are nested twice (`{"GenFuelMixes": {"GenFuelMix": [...]}}`); a day with no data is `{}` or an empty list, depending on the feed.
+- **Time:** Eastern time with its offset (`2026-10-30T12:00:00.000-04:00`), exact through DST.
+- **Checked 2026-10-31** with the project's login:
+  - **Fuel mix:** irregular snapshots, ~200 a day, one record per fuel running (`BeginDate`, `FuelCategory`, `FuelCategoryRollup`, `GenMw`, `MarginalFlag`). A fuel that isn't running is absent, not 0. Day files reach back to about 2020.
+  - **System load:** 288 five-minute intervals a day (`LoadMw`, `NativeLoad`, `ArdDemand`, `SystemLoadBtmPv`, `NativeLoadBtmPv`). `SystemLoadBtmPv` adds ISO-NE's behind-the-meter (rooftop) solar estimate: 9,483 MW measured vs. 14,051 MW with rooftop solar at noon on 2026-10-30. Day files reach back to about 2024.
 
 Feeds relevant to the roadmap (of ~440 endpoints):
 
 | Feed | Endpoint | Use |
 |---|---|---|
-| Generation by fuel | `/genfuelmix/day/{day}` | What's burning: gas, nuclear, hydro, wind, solar, oil, … |
-| System load | `/fiveminutesystemload/day/{day}`, `/hourlysysload/day/{day}` | Demand |
+| Generation by fuel | `/genfuelmix/day/{day}` | What's burning: gas, nuclear, hydro, wind, solar, oil, … (ingested: `bronze.isone_fuel_mix`) |
+| System load | `/fiveminutesystemload/day/{day}`, `/hourlysysload/day/{day}` | Demand, with a rooftop solar estimate (five-minute ingested: `bronze.isone_system_load`) |
 | Zonal load | `/fiveminuteestimatedzonalload/day/{day}` | Demand per load zone (matches the weather points) |
 | Real-time prices | `/fiveminutelmp/{Type}/day/{day}/location/{locationId}`, `/hourlylmp/rt/{prelim,final}/day/{day}` | Prices; prelim values are replaced by final ones |
 | Day-ahead prices | `/hourlylmp/da/final/day/{day}` | The market's forecast of real-time prices |

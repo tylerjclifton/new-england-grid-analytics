@@ -28,6 +28,26 @@ locals {
       secrets  = {}
       env      = {}
     }
+    "isone-fuel-mix" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # One request per day (yesterday and today)
+      secrets  = local.isone_login
+      env      = {}
+    }
+    "isone-system-load" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # One request per day (yesterday and today)
+      secrets  = local.isone_login
+      env      = {}
+    }
+  }
+
+  # The ISO Express login every ISO-NE job reads (ingest/common/isone.py)
+  isone_login = {
+    ISONE_WS_USERNAME = "isone-ws-username"
+    ISONE_WS_PASSWORD = "isone-ws-password"
   }
 }
 

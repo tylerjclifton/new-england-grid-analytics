@@ -4,7 +4,7 @@ A data engineering and modeling project on the New England electric grid: what i
 
 **Docs:** [setup on a new machine](docs/setup.md) · [runbook](docs/runbook.md) · [decision records](docs/decisions/README.md) · [roadmap](docs/roadmap.md) · [data source notes](docs/data-sources.md)
 
-**Status:** first source (weather) built; the grid sources (ISO-NE, EIA) follow once their accounts are approved ([roadmap](docs/roadmap.md)).
+**Status:** weather, plus ISO-NE generation by fuel and system load, are ingesting; ISO-NE prices and EIA history are next ([roadmap](docs/roadmap.md)).
 
 ---
 
@@ -13,8 +13,10 @@ A data engineering and modeling project on the New England electric grid: what i
 | Source | Data | Schedule | Each run pulls |
 |---|---|---|---|
 | Open-Meteo forecast API | Hourly weather for one point per ISO-NE load zone: temperature, dew point, cloud cover, solar irradiance, wind at 10 m and 100 m, precipitation, snowfall | Every 6 hours | Yesterday's best estimate plus the 7-day forecast (snapshot; every run kept) |
+| ISO-NE web services | Generation by fuel: MW per fuel every few minutes, and which fuel is setting the price | Every 6 hours | Every snapshot for yesterday and today ([0010](docs/decisions/0010-isone-day-files.md)) |
+| ISO-NE web services | Five-minute system load, plus ISO-NE's rooftop solar estimate | Every 6 hours | Every interval for yesterday and today |
 
-The dbt transform runs every 6 hours, after the weather run.
+The dbt transform runs every 6 hours, after the ingest runs.
 
 ---
 
@@ -22,7 +24,7 @@ The dbt transform runs every 6 hours, after the weather run.
 
 ```
 Open-Meteo  ──┐                         ┌─────────────────────────────────────────┐
-(ISO-NE)    ──┼──► Cloud Run Jobs ──►   │  BigQuery                               │
+ISO-NE      ──┼──► Cloud Run Jobs ──►   │  BigQuery                               │
 (EIA)       ──┘         ↑               │  bronze → silver → gold                 │
                  Cloud Scheduler        │            └─ dbt Core ─┘               │
                                         └─────────────────────────────────────────┘
@@ -43,6 +45,8 @@ Each layer is its own BigQuery dataset.
 | Bronze table | Grain | How bronze grows |
 |---|---|---|
 | `openmeteo_forecast` | load zone × hour × ingest run | ~1,500 rows per run, ~300 MB/year: every forecast run is kept, so any hour has every forecast made of it ([0009](docs/decisions/0009-weather-per-load-zone.md)) |
+| `isone_fuel_mix` | snapshot × fuel × ingest run | ~3,000 rows per run, ~330 MB/year: each run re-pulls yesterday and today, so revisions are kept ([0010](docs/decisions/0010-isone-day-files.md)) |
+| `isone_system_load` | five-minute interval × ingest run | ~430 rows per run, ~50 MB/year |
 
 | Silver model | Grain | What it produces |
 |---|---|---|
@@ -70,7 +74,7 @@ Every Cloud Run job logs one structured failure report when it fails (`ingest/co
 | Silver models | `<bronze table>__<step>`; `__base` is the cleaned copy | `openmeteo_forecast__base`, `openmeteo_forecast__latest` |
 | Gold tables | `<domain>_<entity>` | |
 | Ingest jobs | `ingest/<source>-<entity>/main.py` → `bronze.<source>_<entity>` | `ingest/openmeteo-forecast` → `bronze.openmeteo_forecast` |
-| Bronze columns | Source system's names and units, plus audit columns | `temperature_2m`, `shortwave_radiation` |
+| Bronze columns | Source system's names and units, plus audit columns | `temperature_2m`, `GenMw`, `SystemLoadBtmPv` |
 | Silver / gold columns | `snake_case`; `_at` = TIMESTAMP (UTC, [0002](docs/decisions/0002-timestamps-in-utc.md)); `_date` = DATE (Eastern); measures carry their unit; booleans `is_` | `hour_at`, `temperature_f`, `wind_speed_100m_ms` |
 | Time zones | Stored in UTC; local time derived in silver or gold with `America/New_York` | |
 | Load zones | ISO-NE's eight names | `ME`, `NH`, `VT`, `CT`, `RI`, `SEMA`, `WCMA`, `NEMA` |
@@ -99,7 +103,7 @@ The data workloads also hold `bigquery.jobUser` (permission to run queries), whi
 
 Designed to cost $0–3/month ([0003](docs/decisions/0003-cost-guardrails.md)). The project shares a billing account (and so its free tiers) with mbta-reliability-analytics.
 
-- **Cadence:** weather and the transform run every 6 hours, on 1 vCPU each. Frequency is the main compute cost, so it's raised only when a source needs it.
+- **Cadence:** every ingest job and the transform run every 6 hours, on 1 vCPU each. ISO-NE jobs pull whole days, so they don't need to poll often to get every interval. Frequency is the main compute cost, so it's raised only when a source needs it.
 - **Incremental silver:** models over growing bronze read only new ingest runs, so query cost stays flat as history grows.
 - **Per-query limit:** `maximum_bytes_billed` of 10 GiB (~$0.06) on every dbt query (`transform/profiles.yml`). A query that would bill more fails before it runs, and the failure emails.
 - **Budget:** $5/month on the billing account, alerting at 50%, 90%, 100%, forecast 100%, 200%, and 400% ($20). Created with `gcloud billing budgets` (setup), outside Terraform, since the deployer has no billing access. It only alerts; there's no billing kill switch, which would stop ingest and lose data sources don't keep.
@@ -136,7 +140,10 @@ ingest/                    One shared image for every ingest job
   common/run.py            What every run shares: job name, run timestamp, logging, failure reports
   common/fetch.py          fetch(): HTTP GET that fails the job cleanly (step 1)
   common/load.py           append_to_bronze(): load into bronze (step 3)
+  common/isone.py          ISO-NE API: login, days to pull, response unwrapping
   openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
+  isone-fuel-mix/          ISO-NE generation by fuel (every 6 hours)
+  isone-system-load/       ISO-NE five-minute system load (every 6 hours)
   tests/                   Job tests against canned API responses
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds

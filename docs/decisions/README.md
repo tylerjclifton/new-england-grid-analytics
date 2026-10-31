@@ -13,6 +13,7 @@ One short file per decision that shaped this project: the situation, what was de
 | [0007](0007-silver-naming-and-materialization.md) | Silver models are `<bronze table>__<step>`; views unless they sit on growing bronze | Accepted |
 | [0008](0008-local-ingest-writes-dev-bronze.md) | Local ingest runs write to `dev_bronze`, never production bronze | Accepted |
 | [0009](0009-weather-per-load-zone.md) | Weather: Open-Meteo forecasts, one point per load zone, every run kept | Accepted |
+| [0010](0010-isone-day-files.md) | ISO-NE: whole-day pulls (yesterday and today) every 6 hours; source field names in bronze | Accepted |
 
 **Adding one:** copy the shape of an existing file, take the next number, add a row here.
 
