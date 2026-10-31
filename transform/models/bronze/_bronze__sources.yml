@@ -31,3 +31,26 @@ sources:
             # Every 6 hours; the slack covers one failed run
             warn_after: {count: 7, period: hour}
             error_after: {count: 13, period: hour}
+
+      - name: isone_fuel_mix
+        description: >
+          ISO-NE generation by fuel: snapshots every few minutes at irregular
+          times, MW per fuel running (a fuel not running is absent, not 0).
+          Each run re-pulls yesterday and today (decision 0010).
+          Grain: snapshot × fuel × ingest run.
+        config:
+          freshness:
+            # Every 6 hours; the slack covers one failed run
+            warn_after: {count: 7, period: hour}
+            error_after: {count: 13, period: hour}
+
+      - name: isone_system_load
+        description: >
+          ISO-NE five-minute system load, with ISO-NE's behind-the-meter
+          (rooftop) solar estimate. Each run re-pulls yesterday and today
+          (decision 0010). Grain: five-minute interval × ingest run.
+        config:
+          freshness:
+            # Every 6 hours; the slack covers one failed run
+            warn_after: {count: 7, period: hour}
+            error_after: {count: 13, period: hour}

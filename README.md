@@ -52,6 +52,10 @@ Each layer is its own BigQuery dataset.
 |---|---|---|
 | `openmeteo_forecast__base` | load zone × hour × ingest run | Every forecast in grid units (°F, m/s, W/m²), with `lead_hours` from run to hour. A view |
 | `openmeteo_forecast__latest` | load zone × hour | The newest value per hour: best estimate for past hours, latest forecast ahead. Incremental table |
+| `isone_fuel_mix__base` | snapshot × fuel × ingest run | Every fuel mix snapshot, renamed; fuels not running are absent, not 0. A view |
+| `isone_fuel_mix__latest` | snapshot × fuel | The newest version of each snapshot: MW per fuel and which fuel was marginal. Incremental table |
+| `isone_system_load__base` | five-minute interval × ingest run | Every load interval, with ISO-NE's rooftop solar estimate as `btm_solar_mw`. A view |
+| `isone_system_load__latest` | five-minute interval | The newest version of each interval: measured load and load with rooftop solar added back. Incremental table |
 
 **Forecast vs. best estimate.** Explaining what happened uses `__latest`. A model that predicts ahead must use what was known at the time, from `__base` at the right `lead_hours`, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md)).
 

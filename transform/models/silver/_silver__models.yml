@@ -99,3 +99,106 @@ models:
       - name: ingested_at
         description: The ingest run this hour's values came from (UTC).
         data_tests: [not_null]
+
+  # ── ISO-NE: generation by fuel ──────────────────────────────────────────────
+
+  - name: isone_fuel_mix__base
+    description: >
+      Every ISO-NE fuel mix snapshot, one row per snapshot × fuel × ingest run.
+      Fuels not running are absent, not 0. No tests: they would scan all of
+      bronze (see header).
+    columns:
+      - name: snapshot_at
+        description: When ISO-NE took the snapshot (UTC); irregular, ~200 a day.
+      - name: fuel
+        description: Fuel (ISO-NE's FuelCategory), e.g. Natural Gas, Nuclear, Wind.
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: isone_fuel_mix__latest
+    description: >
+      The newest version of each snapshot × fuel: MW per fuel running, and
+      which fuel was marginal. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [snapshot_at, fuel]
+    columns:
+      - name: snapshot_at
+        description: When ISO-NE took the snapshot (UTC).
+        data_tests: [not_null]
+      - name: fuel
+        description: Fuel (ISO-NE's FuelCategory), e.g. Natural Gas, Nuclear, Hydro, Wind, Solar, Oil, Batteries.
+        data_tests: [not_null]
+      - name: fuel_group
+        description: ISO-NE's grouping (FuelCategoryRollup); wind, solar, wood, refuse and landfill gas are Renewables.
+      - name: generation_mw
+        description: Generation from this fuel at snapshot_at, MW.
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: -5000  # storage can draw power; room for it to show as negative
+                max_value: 30000
+      - name: is_marginal
+        description: Whether this fuel was setting the real-time price at snapshot_at.
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+  # ── ISO-NE: system load ─────────────────────────────────────────────────────
+
+  - name: isone_system_load__base
+    description: >
+      Every ISO-NE five-minute system load interval, one row per interval ×
+      ingest run, with the rooftop solar estimate broken out. No tests: they
+      would scan all of bronze (see header).
+    columns:
+      - name: interval_start_at
+        description: Start of the five-minute interval (UTC).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: isone_system_load__latest
+    description: >
+      The newest version of each five-minute interval's load, measured and with
+      rooftop solar added back. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [interval_start_at]
+    columns:
+      - name: interval_start_at
+        description: Start of the five-minute interval (UTC).
+        data_tests: [not_null]
+      - name: load_mw
+        description: ISO-NE system load (what the grid served), MW.
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 40000
+      - name: native_load_mw
+        description: load_mw less asset-related demand, MW.
+      - name: asset_related_demand_mw
+        description: Pumped storage pumping and batteries charging, MW.
+      - name: load_with_btm_solar_mw
+        description: load_mw plus ISO-NE's rooftop solar estimate, MW; the demand weather drives.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 40000
+      - name: native_load_with_btm_solar_mw
+        description: native_load_mw plus ISO-NE's rooftop solar estimate, MW.
+      - name: btm_solar_mw
+        description: ISO-NE's behind-the-meter (rooftop) solar estimate, MW; 0 after dark.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 15000
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
