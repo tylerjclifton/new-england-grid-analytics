@@ -7,7 +7,7 @@ Planned work, roughly in order, with why. Move an item to a [decision record](de
 1. **ISO-NE backfill** ([0013](decisions/0013-isone-backfill.md)): run each job's backfill ([runbook](runbook.md#backfill-a-feed)), rebuild silver, and add silver models for `isone_rt_lmp_hourly`. Re-probe the history start dates in a few months to learn whether they're rolling windows.
 2. **ISO-NE's own forecasts** (`/hourlyloadforecast`, `/sevendayforecast`, `/sevendaywindpowerforecast`): the benchmark a load model has to beat (EIA-930's copy of ISO-NE's day-ahead forecast was off by 3.2% on average in January–June 2026).
 3. **EIA-930** ([0014](decisions/0014-eia-930.md)): ingesting daily, with silver models; the API backfill (2019 on) is in. Left: the bulk backfill (2015–2018) and a `--full-refresh` of `eia_region_data__latest` after it.
-4. **Weather history** ([0015](decisions/0015-weather-history.md)): run the archive (2015-07 on) and previous-runs (2021 on) backfills, then silver models (unit conversions shared with the forecast's).
+4. ~~Weather history~~: done ([0015](decisions/0015-weather-history.md)); reanalysis from 2015-07 and past forecasts from 2021 are in silver.
 5. **First gold table:** hourly × load zone, joining load, fuel mix, prices, and weather (UTC, plus local hour and date). The input to dashboards and models.
 6. **Dashboard** (Streamlit on Cloud Run, scaling to zero, like the MBTA site): fuel mix, prices, load vs. temperature. Multiple pages from the start. Probably a subdomain of tylerclifton.com.
 

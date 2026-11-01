@@ -13,8 +13,9 @@
   on this view would scan all of bronze every run (decision 0003).
 
   Steps:
-    1. final select — rename to project conventions; °C → °F (ISO-NE and
-                      degree-day convention); lead time from run to hour
+    1. final select — rename to project conventions and convert units
+                      (openmeteo_weather_columns macro, shared with the archive
+                      and previous runs); lead time from run to hour
 #}
 
 SELECT
@@ -26,14 +27,8 @@ SELECT
     -- hour had already passed (the model's best estimate, not a forecast)
     TIMESTAMP_DIFF(time, TIMESTAMP_TRUNC(ingested_at, HOUR), HOUR) AS lead_hours,
 
-    ROUND(temperature_2m * 9 / 5 + 32, 1)                       AS temperature_f,
-    ROUND(dew_point_2m * 9 / 5 + 32, 1)                         AS dew_point_f,
-    cloud_cover                                                 AS cloud_cover_pct,
-    shortwave_radiation                                         AS solar_irradiance_w_m2,
-    wind_speed_10m                                              AS wind_speed_10m_ms,
-    wind_speed_100m                                             AS wind_speed_100m_ms,
-    precipitation                                               AS precipitation_mm,
-    snowfall                                                    AS snowfall_cm,
+    -- °F, m/s, W/m², mm, cm (macros/openmeteo_weather_columns.sql)
+    {{ openmeteo_weather_columns() }},
 
     latitude,
     longitude,

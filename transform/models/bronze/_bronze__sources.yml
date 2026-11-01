@@ -123,3 +123,20 @@ sources:
             # Daily; the slack covers one failed run
             warn_after: {count: 26, period: hour}
             error_after: {count: 50, period: hour}
+
+      - name: openmeteo_archive
+        description: >
+          Open-Meteo hourly reanalysis (the best estimate of past weather), one
+          point per ISO-NE load zone, in source units, from 2015-07 (decision
+          0015). Grain: load zone × hour × ingest run.
+        config:
+          freshness:
+            # Daily; the slack covers one failed run
+            warn_after: {count: 26, period: hour}
+            error_after: {count: 50, period: hour}
+
+      - name: openmeteo_previous_runs
+        description: >
+          Open-Meteo past forecasts as issued, 1 and 2 days ahead, one point
+          per ISO-NE load zone, 2021 to 2026-10-28: a one-off backfill (decision
+          0015). No freshness check. Grain: load zone × hour × lead × ingest run.

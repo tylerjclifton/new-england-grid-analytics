@@ -100,6 +100,118 @@ models:
         description: The ingest run this hour's values came from (UTC).
         data_tests: [not_null]
 
+  - name: openmeteo_archive__base
+    description: >
+      Every Open-Meteo reanalysis value (the weather as it was), one row per
+      load zone × hour × ingest run, from 2015-07, in grid units. No tests:
+      they would scan all of bronze (see header).
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone the weather point represents.
+      - name: hour_at
+        description: Hour the values are for (UTC). Precipitation, snowfall, and irradiance cover the hour ending here.
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: openmeteo_archive__latest
+    description: >
+      The newest reanalysis value per load zone × hour, from 2015-07: weather
+      to explain what happened. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [load_zone, hour_at]
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone the weather point represents.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: hour_at
+        description: Hour the values are for (UTC).
+        data_tests: [not_null]
+      - name: temperature_f
+        description: Air temperature at 2 m, °F.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: -50
+                max_value: 120
+      - name: solar_irradiance_w_m2
+        description: Global horizontal irradiance, W/m², mean over the hour ending at hour_at.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1400
+      - name: wind_speed_100m_ms
+        description: Wind speed at 100 m (turbine hub height), m/s.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: ingested_at
+        description: The ingest run this hour's values came from (UTC).
+        data_tests: [not_null]
+
+  - name: openmeteo_previous_runs__base
+    description: >
+      Past forecasts as issued, 1 and 2 days ahead, one row per load zone ×
+      hour × lead × ingest run, 2021 to 2026-10-28, in grid units. No tests:
+      they would scan all of bronze (see header).
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone the weather point represents.
+      - name: hour_at
+        description: Hour the forecast is for (UTC).
+      - name: lead_days
+        description: How many days before hour_at the forecast was issued (1 or 2).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: openmeteo_previous_runs__latest
+    description: >
+      The forecast for each load zone × hour as issued 1 and 2 days before it,
+      2021 to 2026-10-28: what a day-ahead model may train on. Variables other
+      than temperature are null before early 2024. Incremental table (see model
+      header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [load_zone, hour_at, lead_days]
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone the weather point represents.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: hour_at
+        description: Hour the forecast is for (UTC).
+        data_tests: [not_null]
+      - name: lead_days
+        description: How many days before hour_at the forecast was issued.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2]
+                quote: false
+      - name: temperature_f
+        description: Forecast air temperature at 2 m, °F.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: -50
+                max_value: 120
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
   # ── ISO-NE: generation by fuel ──────────────────────────────────────────────
 
   - name: isone_fuel_mix__base

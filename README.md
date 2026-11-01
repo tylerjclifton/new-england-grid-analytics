@@ -67,6 +67,8 @@ Each layer is its own BigQuery dataset.
 |---|---|---|
 | `openmeteo_forecast__base` | load zone × hour × ingest run | Every forecast in grid units (°F, m/s, W/m²), with `lead_hours` from run to hour. A view |
 | `openmeteo_forecast__latest` | load zone × hour | The newest value per hour: best estimate for past hours, latest forecast ahead. Incremental table |
+| `openmeteo_archive__base` / `__latest` | load zone × hour (× ingest run) | Reanalysis from 2015-07, the weather as it was, in the forecast's units. View / incremental table ([0015](docs/decisions/0015-weather-history.md)) |
+| `openmeteo_previous_runs__base` / `__latest` | load zone × hour × lead (× ingest run) | Forecasts as issued 1 and 2 days ahead, 2021 to 2026-10-28: what a day-ahead model may train on. View / incremental table |
 | `isone_fuel_mix__base` | snapshot × fuel × ingest run | Every fuel mix snapshot, renamed; fuels not running are absent, not 0. A view |
 | `isone_fuel_mix__latest` | snapshot × fuel | The newest version of each snapshot: MW per fuel and which fuel was marginal. Incremental table |
 | `isone_system_load__base` | five-minute interval × ingest run | Every load interval, with ISO-NE's rooftop solar estimate as `btm_solar_mw`. A view |
@@ -84,7 +86,7 @@ Each layer is its own BigQuery dataset.
 | `eia_fuel_type_data__base` / `__latest` | hour × fuel (× ingest run) | EIA-930 generation by fuel, 2019 on, by hour start. View / incremental table |
 | `isone_pricing_locations` (seed) | location | ISO-NE location ID → project code (HUB, ME … NEMA), kept in `transform/seeds/` |
 
-**Forecast vs. best estimate.** Explaining what happened uses `__latest`. A model that predicts ahead must use what was known at the time, from `__base` at the right `lead_hours`, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md)).
+**Forecast vs. best estimate.** Explaining what happened uses the reanalysis (`openmeteo_archive__latest`, from 2015) or the forecast's `__latest`. A model that predicts ahead must use what was known at the time: `openmeteo_previous_runs__latest` before 2026-10-29, `openmeteo_forecast__base` at the right `lead_hours` after, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md), [0015](docs/decisions/0015-weather-history.md)). A day ahead, the forecast's temperature was off by 2.4°F on average (2021–2026).
 
 ### Data quality
 
@@ -193,7 +195,7 @@ transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds
   models/silver/           <bronze table>__<step> models
   seeds/                   Reference data (ISO-NE location IDs → load zone codes)
-  macros/                  keep_latest_version (optionally preferring final versions), last_processed_run, dataset naming
+  macros/                  keep_latest_version (optionally preferring final versions), last_processed_run, openmeteo_weather_columns, dataset naming
   run.py                   Transform entrypoint: dbt build, source freshness, failure report
 scripts/build-image.sh     Build and push a component image
 ```
