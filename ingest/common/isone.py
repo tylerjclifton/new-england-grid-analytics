@@ -19,22 +19,20 @@ A job using it, once per batch of days (day_batches(): one batch normally,
               (price records first go through flatten_location())
   3. Write  → append_to_bronze(df)
 
-Backfill mode (decision 0013): BACKFILL_START and BACKFILL_END (YYYYMMDD,
-inclusive), set on a one-off execution, replace a job's usual days. Every batch
-shares the run's ingested_at, so afterwards the affected silver models are
-rebuilt with --full-refresh (docs/runbook.md, "Backfill a feed").
+Backfill mode (common/backfill.py, decision 0013) replaces a job's usual days
+with a day range, batched by month.
 """
 
 # Import standard libraries
 import datetime
 import logging
 import os
-import time
 
 # Import third party libraries
 import pandas
 
 # Import shared ingest helpers
+from common.backfill import backfill_batches, is_backfill, pause
 from common.fetch import fetch
 from common.run import fail
 
@@ -45,13 +43,6 @@ ISO_TIME_ZONE = 'America/New_York'
 # re-pulls yesterday, which catches the intervals published after the previous
 # day's last run (and any revision).
 LOOKBACK_DAYS = int(os.getenv('LOOKBACK_DAYS', '2'))
-
-# Backfill mode: the inclusive day range to pull instead (unset normally), how
-# many days each batch loads, and a pause between calls to go easy on the API
-BACKFILL_START         = os.getenv('BACKFILL_START')
-BACKFILL_END           = os.getenv('BACKFILL_END')
-BACKFILL_BATCH_DAYS    = 31
-BACKFILL_PAUSE_SECONDS = 0.1
 
 # Pricing locations the price jobs ask for (decision 0012): the Hub and the
 # eight load zones, whose IDs match the zonal load feed's load_zone_id.
@@ -80,34 +71,16 @@ def days_to_fetch(today=None):
     return eastern_days(range(1 - LOOKBACK_DAYS, 1), today=today)
 
 
-def is_backfill():
-    """Whether this run is a backfill (BACKFILL_START / BACKFILL_END set)."""
-    return bool(BACKFILL_START or BACKFILL_END)
-
-
-def backfill_days():
-    """Every day from BACKFILL_START to BACKFILL_END inclusive, as YYYYMMDD; fails the job on a bad range."""
-    try:
-        start, end = (datetime.datetime.strptime(day, '%Y%m%d') for day in (BACKFILL_START, BACKFILL_END))
-    except (TypeError, ValueError):
-        fail(f"BACKFILL_START and BACKFILL_END must both be YYYYMMDD days (got {BACKFILL_START!r}, {BACKFILL_END!r})")
-    if start > end:
-        fail(f"BACKFILL_START ({BACKFILL_START}) is after BACKFILL_END ({BACKFILL_END})")
-    return [day.strftime('%Y%m%d') for day in pandas.date_range(start, end)]
-
-
 def day_batches(days=None):
     """
-    The days this run pulls, as batches to fetch and load one at a time.
+    The days this run pulls (YYYYMMDD), as batches to fetch and load one at a time.
 
     Normally that's `days` (default days_to_fetch()) as a single batch. In
-    backfill mode it's the backfill range in batches of BACKFILL_BATCH_DAYS.
+    backfill mode it's the backfill range, a month at a time.
     """
     if not is_backfill():
         return [days or days_to_fetch()]
-    all_days = backfill_days()
-    logging.info(f"Backfill: {len(all_days)} days, {all_days[0]} to {all_days[-1]}")
-    return [all_days[i:i + BACKFILL_BATCH_DAYS] for i in range(0, len(all_days), BACKFILL_BATCH_DAYS)]
+    return [[day.strftime('%Y%m%d') for day in batch] for batch in backfill_batches()]
 
 
 def records(body):
@@ -146,8 +119,7 @@ def fetch_days(feed, days, locations=(None,)):
             path_records = records(fetch(f"{API_URL}/{path}.json", auth=(username, password)).json())
             logging.info(f"{path}: {len(path_records)} records")
             all_records.extend(path_records)
-            if is_backfill():
-                time.sleep(BACKFILL_PAUSE_SECONDS)
+            pause()
     return all_records
 
 

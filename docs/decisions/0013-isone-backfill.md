@@ -18,9 +18,9 @@ Whether these are launch dates or rolling retention windows can't be told from o
 Real-time prices are only five-minute from 2024, but hourly real-time prices reach back to 2019. Five years more of real-time prices (two gas-price winters among them) matter more for modeling than five-minute detail does.
 
 ## Decision
-- **Backfill is a mode of each scheduled job, not separate code.** `BACKFILL_START` / `BACKFILL_END` (YYYYMMDD, inclusive), set on a one-off execution (`gcloud run jobs execute --update-env-vars`, with `--task-timeout`), replace the job's usual days (`ingest/common/isone.py`). Shaping and loading are the same code the schedule runs.
+- **Backfill is a mode of each scheduled job, not separate code.** `BACKFILL_START` / `BACKFILL_END` (YYYYMMDD, inclusive), set on a one-off execution (`gcloud run jobs execute --update-env-vars`, with `--task-timeout`), replace the job's usual days (`ingest/common/backfill.py`, used through `ingest/common/isone.py`). Shaping and loading are the same code the schedule runs.
 - **Batched by month.** A backfill fetches and loads 31 days at a time, so memory stays flat at 512 MiB however long the range. Batches share the run's `ingested_at`, as any run does.
-- **Polite:** a 0.1 s pause between calls in backfill mode. ISO-NE sends no rate-limit headers; the largest backfill (day-ahead, ~26,000 calls) takes about two hours.
+- **Polite:** a pause between calls in backfill mode (`common/backfill.py`). ISO-NE sends no rate-limit headers, but does rate-limit (see the 2026-11-01 note).
 - **Real-time backfills are final prices only.** Preliminary prices for past days add nothing once finals exist.
 - **Hourly real-time prices for 2019–2024** go to their own table, `bronze.isone_rt_lmp_hourly`, from a backfill-only job (`isone-rt-lmp-hourly`: no schedule; it refuses to run without a range). From 2024 on, the five-minute feed covers real time and hourly is derived from it. The overlapping months (2024) are in both, which checks that derivation.
 - **Ranges start before the probed first day** (e.g. 2019-01-01): days before a feed's history return nothing and load nothing.
@@ -31,3 +31,5 @@ Real-time prices are only five-minute from 2024, but hourly real-time prices rea
 - **A failed backfill retries the whole range** (the job's one retry), duplicating rows; silver's `__latest` models collapse duplicates, so it costs only space.
 - **Re-running is safe**, for the same reason: bronze gains a version, silver keeps the newest.
 - Gold combines the two real-time tables: hourly from `isone_rt_lmp_hourly` before the five-minute history, derived from `isone_rt_lmp` after.
+
+**2026-11-01 — ISO-NE rate-limits sustained calls.** The first two backfills, run at once with a 0.1 s pause, got HTTP 429 after about 90 seconds and failed (and alerted, as designed); the five-minute one's retry then had its connection reset. Since then: `fetch()` retries 429s, 5xx errors, and dropped connections with doubling waits (or the source's `Retry-After`), for every job; backfill mode pauses 0.25 s between calls and moved to `common/backfill.py`, for other sources to share; backfills run **one at a time**. The day-ahead backfill now takes about three hours. Rows the failed runs had loaded stay in bronze; re-running adds versions that silver collapses. The same run showed five-minute history doesn't start until after January 2024.

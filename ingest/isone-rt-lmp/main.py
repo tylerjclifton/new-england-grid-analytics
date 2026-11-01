@@ -26,15 +26,8 @@ spikes that last minutes would be lost in an hourly feed.
 import logging
 
 # Import shared ingest helpers
-from common.isone import (
-    PRICING_LOCATIONS,
-    day_batches,
-    eastern_days,
-    fetch_days,
-    flatten_location,
-    is_backfill,
-    to_frame,
-)
+from common.backfill import is_backfill
+from common.isone import PRICING_LOCATIONS, day_batches, eastern_days, fetch_days, flatten_location, to_frame
 from common.load import append_to_bronze
 
 # Record fields under ISO-NE's names (the location flattened by flatten_location)

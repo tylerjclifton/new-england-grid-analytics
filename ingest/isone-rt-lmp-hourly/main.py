@@ -18,7 +18,8 @@ Writes to:  bronze.isone_rt_lmp_hourly (append) — one row per hour × location
 import logging
 
 # Import shared ingest helpers
-from common.isone import PRICING_LOCATIONS, day_batches, fetch_days, flatten_location, is_backfill, to_frame
+from common.backfill import is_backfill
+from common.isone import PRICING_LOCATIONS, day_batches, fetch_days, flatten_location, to_frame
 from common.load import append_to_bronze
 from common.run import fail
 

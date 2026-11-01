@@ -72,13 +72,67 @@ def test_append_skips_empty_frames(fake_bigquery):
     assert fake_bigquery == []
 
 
-def test_fetch_exits_on_http_error(monkeypatch):
-    monkeypatch.setattr(fetch.requests, "get", lambda *a, **k: SimpleNamespace(status_code=503))
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Record fetch()'s retry waits instead of sleeping through them."""
+    waits = []
+    monkeypatch.setattr(fetch.time, "sleep", waits.append)
+    return waits
+
+
+def responses(*statuses, retry_after=None):
+    """A requests.get stand-in answering with each status in turn."""
+    answers = iter(statuses)
+    headers = {"Retry-After": retry_after} if retry_after else {}
+    return lambda *a, **k: SimpleNamespace(status_code=next(answers), headers=headers)
+
+
+def test_fetch_exits_after_retrying_a_server_error(monkeypatch, no_sleep):
+    monkeypatch.setattr(fetch.requests, "get", responses(*[503] * fetch.MAX_ATTEMPTS))
 
     with pytest.raises(SystemExit) as exit_info:
         fetch.fetch("https://example.test")
 
     assert exit_info.value.code == 1
+    assert no_sleep == [5, 10, 20, 40]  # a wait before each retry, doubling
+
+
+def test_fetch_retries_a_rate_limit_then_succeeds(monkeypatch, no_sleep):
+    monkeypatch.setattr(fetch.requests, "get", responses(429, 429, 200))
+
+    assert fetch.fetch("https://example.test").status_code == 200
+    assert len(no_sleep) == 2
+
+
+def test_fetch_honors_retry_after(monkeypatch, no_sleep):
+    monkeypatch.setattr(fetch.requests, "get", responses(429, 200, retry_after="30"))
+
+    fetch.fetch("https://example.test")
+    assert no_sleep == [30]
+
+
+def test_fetch_does_not_retry_a_client_error(monkeypatch, no_sleep):
+    """A 401 or 404 won't change on retry: fail at once."""
+    monkeypatch.setattr(fetch.requests, "get", responses(404))
+
+    with pytest.raises(SystemExit):
+        fetch.fetch("https://example.test")
+    assert no_sleep == []
+
+
+def test_fetch_redacts_the_api_key_from_network_errors(monkeypatch, no_sleep, capsys):
+    """The key travels in the URL; a connection error's message would otherwise carry it to the alert email."""
+    def refuse(url, params=None, **kwargs):
+        message = f"Max retries exceeded with url: /data?api_key={params['api_key']}"
+        raise fetch.requests.exceptions.ConnectionError(message)
+    monkeypatch.setattr(fetch.requests, "get", refuse)
+
+    with pytest.raises(SystemExit):
+        fetch.fetch("https://api.example.test/data", params={"api_key": "SECRET123"})
+
+    output = capsys.readouterr()
+    assert "SECRET123" not in output.out + output.err
+    assert "api_key=***" in output.out
 
 
 # ── Failure reports (the alerting contract in infra/monitoring.tf) ────────────

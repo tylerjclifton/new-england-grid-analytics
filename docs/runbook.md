@@ -58,14 +58,14 @@ gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --task-timeout=3
 
 | Job | Range used on 2026-10-31 | Calls | Rough time |
 |---|---|---|---|
-| `ingest-isone-fuel-mix` | 20190101–20261031 | ~2,900 | 15 min |
-| `ingest-isone-system-load` | 20240101–20261031 | ~1,000 | 5 min |
+| `ingest-isone-fuel-mix` | 20190101–20261031 | ~2,900 | 25 min |
+| `ingest-isone-system-load` | 20240101–20261031 | ~1,000 | 10 min |
 | `ingest-isone-zonal-load` | 20250101–20261031 | ~670 | 5 min |
-| `ingest-isone-rt-lmp` (final only) | 20240101–20261028 | ~9,300 | 40 min |
-| `ingest-isone-rt-lmp-hourly` (backfill only) | 20190101–20241231 | ~19,700 | 1.5 h |
-| `ingest-isone-da-lmp` | 20190101–20261101 | ~25,700 | 2 h |
+| `ingest-isone-rt-lmp` (final only) | 20240101–20261028 | ~9,300 | 1.5 h |
+| `ingest-isone-rt-lmp-hourly` (backfill only) | 20190101–20241231 | ~19,700 | 2.5 h |
+| `ingest-isone-da-lmp` | 20190101–20261101 | ~25,700 | 3.5 h |
 
-Add `--async` to start it and return; follow it in Cloud Run → Jobs → the job → Executions. Then **rebuild that feed's silver** so no backfilled row is skipped (see the next section): e.g. `--select isone_fuel_mix__latest`. Check the result with a count by month in bronze and silver.
+**Run ISO-NE backfills one at a time**: ISO-NE rate-limits sustained calls (HTTP 429), and two at once tripped it ([0013](decisions/0013-isone-backfill.md)). `fetch()` retries a 429, but a limit that persists fails the run, which emails an alert. Add `--async` to start it and return; follow it in Cloud Run → Jobs → the job → Executions. Then **rebuild that feed's silver** so no backfilled row is skipped (see the next section): e.g. `--select isone_fuel_mix__latest`. Check the result with a count by month in bronze and silver.
 
 ## Rebuild an incremental silver table
 

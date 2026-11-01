@@ -293,13 +293,13 @@ def test_zonal_load_one_row_per_interval_per_zone(run_job, isone_login):
 
 @pytest.fixture
 def backfill(monkeypatch):
-    """backfill(start, end): put common.isone in backfill mode, as the env vars would."""
-    import common.isone as isone
+    """backfill(start, end): put common.backfill in backfill mode, as the env vars would."""
+    import common.backfill as backfill_mode
 
     def _set(start, end):
-        monkeypatch.setattr(isone, 'BACKFILL_START', start)
-        monkeypatch.setattr(isone, 'BACKFILL_END', end)
-        monkeypatch.setattr(isone, 'BACKFILL_PAUSE_SECONDS', 0)
+        monkeypatch.setattr(backfill_mode, 'BACKFILL_START', start)
+        monkeypatch.setattr(backfill_mode, 'BACKFILL_END', end)
+        monkeypatch.setattr(backfill_mode, 'PAUSE_SECONDS', 0)
     return _set
 
 
@@ -311,7 +311,8 @@ def test_isone_normal_run_is_one_batch():
 
 
 def test_isone_backfill_batches_the_range_by_month(backfill):
-    from common.isone import BACKFILL_BATCH_DAYS, day_batches
+    from common.backfill import BATCH_DAYS as BACKFILL_BATCH_DAYS
+    from common.isone import day_batches
 
     backfill('20260101', '20260305')
     batches = day_batches(['ignored'])
