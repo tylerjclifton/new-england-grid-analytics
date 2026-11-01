@@ -36,10 +36,12 @@ class FakeResponse:
 @pytest.fixture
 def run_job(monkeypatch):
     """
-    run_job(job, responses) → DataFrame passed to append_to_bronze (or None).
+    run_job(job, responses) → the first DataFrame passed to append_to_bronze
+    (or None).
 
     `responses` is a list of bodies returned by successive HTTP GETs. Each GET's
-    URL and params are recorded in run_job.requests.
+    URL and params are recorded in run_job.requests, and every DataFrame loaded
+    (one per batch, for jobs that load in batches) in run_job.loads.
     """
 
     def _run(job, responses):
@@ -47,20 +49,21 @@ def run_job(monkeypatch):
         import common.load as load
 
         bodies = iter(responses)
-        captured = {}
         _run.requests.clear()
+        _run.loads.clear()
 
         def fake_get(url, params=None, **kwargs):
             _run.requests.append({"url": url, "params": params or {}})
             return FakeResponse(next(bodies))
 
         monkeypatch.setattr(fetch.requests, "get", fake_get)
-        monkeypatch.setattr(load, "append_to_bronze", lambda df: captured.setdefault("df", df))
+        monkeypatch.setattr(load, "append_to_bronze", _run.loads.append)
 
         script = INGEST_DIR / job / "main.py"
         with mock.patch.object(sys, "argv", [str(script)]):
             runpy.run_path(str(script), run_name="__main__")
-        return captured.get("df")
+        return _run.loads[0] if _run.loads else None
 
     _run.requests = []
+    _run.loads = []
     return _run

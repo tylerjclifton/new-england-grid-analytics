@@ -1,7 +1,7 @@
 """
 What every ISO-NE ingest job shares: the web services API, its login, which
-days and pricing locations to ask for, and unwrapping its responses
-(decisions 0010, 0012).
+days and pricing locations to ask for, backfill mode, and unwrapping its
+responses (decisions 0010, 0012, 0013).
 
 ISO-NE's REST API (webservices.iso-ne.com/api/v1.1) takes HTTP basic auth with
 an ISO Express login, read from ISONE_WS_USERNAME / ISONE_WS_PASSWORD (Secret
@@ -11,18 +11,25 @@ being Eastern). Times come back in Eastern time with their UTC offset (e.g.
 2026-10-30T12:00:00.000-04:00), so converting to UTC is exact through DST
 changes (decision 0002).
 
-A job using it:
+A job using it, once per batch of days (day_batches(): one batch normally,
+~monthly batches in backfill mode, so memory stays flat):
   1. Fetch  → fetch_days('<feed>', days, locations): every record for each
-              day (default days_to_fetch()) and pricing location
+              day and pricing location
   2. Shape  → to_frame(records, COLUMNS): one row per record, its time in UTC
               (price records first go through flatten_location())
   3. Write  → append_to_bronze(df)
+
+Backfill mode (decision 0013): BACKFILL_START and BACKFILL_END (YYYYMMDD,
+inclusive), set on a one-off execution, replace a job's usual days. Every batch
+shares the run's ingested_at, so afterwards the affected silver models are
+rebuilt with --full-refresh (docs/runbook.md, "Backfill a feed").
 """
 
 # Import standard libraries
 import datetime
 import logging
 import os
+import time
 
 # Import third party libraries
 import pandas
@@ -38,6 +45,13 @@ ISO_TIME_ZONE = 'America/New_York'
 # re-pulls yesterday, which catches the intervals published after the previous
 # day's last run (and any revision).
 LOOKBACK_DAYS = int(os.getenv('LOOKBACK_DAYS', '2'))
+
+# Backfill mode: the inclusive day range to pull instead (unset normally), how
+# many days each batch loads, and a pause between calls to go easy on the API
+BACKFILL_START         = os.getenv('BACKFILL_START')
+BACKFILL_END           = os.getenv('BACKFILL_END')
+BACKFILL_BATCH_DAYS    = 31
+BACKFILL_PAUSE_SECONDS = 0.1
 
 # Pricing locations the price jobs ask for (decision 0012): the Hub and the
 # eight load zones, whose IDs match the zonal load feed's load_zone_id.
@@ -66,6 +80,36 @@ def days_to_fetch(today=None):
     return eastern_days(range(1 - LOOKBACK_DAYS, 1), today=today)
 
 
+def is_backfill():
+    """Whether this run is a backfill (BACKFILL_START / BACKFILL_END set)."""
+    return bool(BACKFILL_START or BACKFILL_END)
+
+
+def backfill_days():
+    """Every day from BACKFILL_START to BACKFILL_END inclusive, as YYYYMMDD; fails the job on a bad range."""
+    try:
+        start, end = (datetime.datetime.strptime(day, '%Y%m%d') for day in (BACKFILL_START, BACKFILL_END))
+    except (TypeError, ValueError):
+        fail(f"BACKFILL_START and BACKFILL_END must both be YYYYMMDD days (got {BACKFILL_START!r}, {BACKFILL_END!r})")
+    if start > end:
+        fail(f"BACKFILL_START ({BACKFILL_START}) is after BACKFILL_END ({BACKFILL_END})")
+    return [day.strftime('%Y%m%d') for day in pandas.date_range(start, end)]
+
+
+def day_batches(days=None):
+    """
+    The days this run pulls, as batches to fetch and load one at a time.
+
+    Normally that's `days` (default days_to_fetch()) as a single batch. In
+    backfill mode it's the backfill range in batches of BACKFILL_BATCH_DAYS.
+    """
+    if not is_backfill():
+        return [days or days_to_fetch()]
+    all_days = backfill_days()
+    logging.info(f"Backfill: {len(all_days)} days, {all_days[0]} to {all_days[-1]}")
+    return [all_days[i:i + BACKFILL_BATCH_DAYS] for i in range(0, len(all_days), BACKFILL_BATCH_DAYS)]
+
+
 def records(body):
     """
     The list of records in one response.
@@ -85,10 +129,10 @@ def records(body):
     return content if isinstance(content, list) else [content]
 
 
-def fetch_days(feed, days=None, locations=(None,)):
+def fetch_days(feed, days, locations=(None,)):
     """
-    Every record `feed` has for each day (default days_to_fetch()), oldest day
-    first. A per-location feed (prices) takes `locations`, one call each.
+    Every record `feed` has for each of `days`, oldest day first. A
+    per-location feed (prices) takes `locations`, one call each.
     """
     username = os.getenv('ISONE_WS_USERNAME')
     password = os.getenv('ISONE_WS_PASSWORD')
@@ -96,12 +140,14 @@ def fetch_days(feed, days=None, locations=(None,)):
         fail("ISONE_WS_USERNAME and ISONE_WS_PASSWORD must be set (the ISO Express login)")
 
     all_records = []
-    for day in days or days_to_fetch():
+    for day in days:
         for location in locations:
             path = f"{feed}/day/{day}" + (f"/location/{location}" if location else '')
             path_records = records(fetch(f"{API_URL}/{path}.json", auth=(username, password)).json())
             logging.info(f"{path}: {len(path_records)} records")
             all_records.extend(path_records)
+            if is_backfill():
+                time.sleep(BACKFILL_PAUSE_SECONDS)
     return all_records
 
 

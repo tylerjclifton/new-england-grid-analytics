@@ -46,6 +46,27 @@ printf '%s' "<value>" | gcloud secrets versions add eia-api-key --data-file=-
 
 Jobs read `latest` at startup, so the next run picks up a new value. After rotating, disable the old version: `gcloud secrets versions disable <n> --secret=<secret>`.
 
+## Backfill a feed
+
+Every ISO-NE job has a backfill mode ([0013](decisions/0013-isone-backfill.md)): one execution with a day range pulls that range a month at a time, instead of yesterday and today. The override applies to that execution only; the job's schedule is untouched.
+
+```bash
+# Example: fuel mix from 2019 (days before a feed's history load nothing)
+gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --task-timeout=3h \
+  --update-env-vars=BACKFILL_START=20190101,BACKFILL_END=20261031
+```
+
+| Job | Range used on 2026-10-31 | Calls | Rough time |
+|---|---|---|---|
+| `ingest-isone-fuel-mix` | 20190101–20261031 | ~2,900 | 15 min |
+| `ingest-isone-system-load` | 20240101–20261031 | ~1,000 | 5 min |
+| `ingest-isone-zonal-load` | 20250101–20261031 | ~670 | 5 min |
+| `ingest-isone-rt-lmp` (final only) | 20240101–20261028 | ~9,300 | 40 min |
+| `ingest-isone-rt-lmp-hourly` (backfill only) | 20190101–20241231 | ~19,700 | 1.5 h |
+| `ingest-isone-da-lmp` | 20190101–20261101 | ~25,700 | 2 h |
+
+Add `--async` to start it and return; follow it in Cloud Run → Jobs → the job → Executions. Then **rebuild that feed's silver** so no backfilled row is skipped (see the next section): e.g. `--select isone_fuel_mix__latest`. Check the result with a count by month in bronze and silver.
+
 ## Rebuild an incremental silver table
 
 Incremental tables (`silver.openmeteo_forecast__latest`) process only new ingest runs. If a logic change needs history reprocessed, rebuild the table from bronze (cheap: weather bronze grows ~300 MB/year, well under the 10 GiB per-query limit; [0003](decisions/0003-cost-guardrails.md)):

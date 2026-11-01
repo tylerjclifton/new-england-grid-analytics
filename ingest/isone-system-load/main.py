@@ -15,7 +15,8 @@ Source:     ISO-NE web services, /fiveminutesystemload/day/{day} (ISO Express
 Cadence:    Every 6 hours
 Each run:   Every interval for yesterday and today (Eastern days, see
             common/isone.py); re-pulling yesterday catches its last hours and
-            any revision.
+            any revision. A backfill pulls a day range instead, a month at a
+            time (decision 0013).
 Writes to:  bronze.isone_system_load (append) — one row per interval × run
 """
 
@@ -23,23 +24,26 @@ Writes to:  bronze.isone_system_load (append) — one row per interval × run
 import logging
 
 # Import shared ingest helpers
-from common.isone import fetch_days, to_frame
+from common.isone import day_batches, fetch_days, to_frame
 from common.load import append_to_bronze
 
 # Record fields, kept under ISO-NE's names (bronze keeps the source's names)
 MEASURES = ['LoadMw', 'NativeLoad', 'ArdDemand', 'SystemLoadBtmPv', 'NativeLoadBtmPv']
 COLUMNS  = ['BeginDate', *MEASURES]
 
-# ── Fetch ─────────────────────────────────────────────────────────────────────
+# One batch of days at a time (a single batch unless backfilling)
+for days in day_batches():
 
-records = fetch_days('fiveminutesystemload')
+    # ── Fetch ─────────────────────────────────────────────────────────────────
 
-# ── Shape ─────────────────────────────────────────────────────────────────────
+    records = fetch_days('fiveminutesystemload', days)
 
-df = to_frame(records, COLUMNS).astype(dict.fromkeys(MEASURES, 'float64'))
-if not df.empty:
-    logging.info(f"Shaped {len(df)} rows: {df['BeginDate'].min()} to {df['BeginDate'].max()}")
+    # ── Shape ─────────────────────────────────────────────────────────────────
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+    df = to_frame(records, COLUMNS).astype(dict.fromkeys(MEASURES, 'float64'))
+    if not df.empty:
+        logging.info(f"Shaped {len(df)} rows: {df['BeginDate'].min()} to {df['BeginDate'].max()}")
 
-append_to_bronze(df)
+    # ── Write ─────────────────────────────────────────────────────────────────
+
+    append_to_bronze(df)

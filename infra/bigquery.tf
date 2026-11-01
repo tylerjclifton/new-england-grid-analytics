@@ -112,6 +112,12 @@ locals {
       ])
     }
 
+    isone_rt_lmp_hourly = {
+      description = "ISO-NE hourly real-time prices (LMPs), final, at the Hub and the eight load zones: a backfill of the years before ISO-NE's five-minute history begins (decision 0013). Each hourly price is the mean of that hour's five-minute prices. Grain: hour × location × ingest run."
+      clustering  = ["LocId", "BeginDate"]
+      columns     = local.isone_lmp_columns
+    }
+
     isone_da_lmp = {
       description = "ISO-NE hourly day-ahead prices (LMPs) at the Hub and the eight load zones (decision 0012): the market's forecast of real-time prices, final when published (around midday the day before). Each run pulls today and tomorrow. Grain: hour × location × ingest run."
       clustering  = ["LocId", "BeginDate"]

@@ -224,7 +224,8 @@ def test_rt_lmp_pulls_prelim_recent_days_and_final_older_days(run_job, isone_log
     from common.isone import PRICING_LOCATIONS
 
     calls = 2 * 2 * len(PRICING_LOCATIONS)  # 2 versions × 2 days × locations
-    df = run_job('isone-rt-lmp', [lmp_day('2026-10-30T12:00:00.000-04:00')] * calls)
+    run_job('isone-rt-lmp', [lmp_day('2026-10-30T12:00:00.000-04:00')] * calls)
+    df = pd.concat(run_job.loads)  # one load per version
 
     urls = [request['url'] for request in run_job.requests]
     assert len(urls) == calls
@@ -286,3 +287,83 @@ def test_zonal_load_one_row_per_interval_per_zone(run_job, isone_login):
     assert df['load_zone_id'].dtype == 'int64'
     assert df['estimated_btm_pv_mw'].dtype == 'float64'
     assert df['interval_begin_date'].iloc[0] == pd.Timestamp('2026-10-30T16:00', tz='UTC')
+
+
+# ── ISO-NE backfill mode (decision 0013) ──────────────────────────────────────
+
+@pytest.fixture
+def backfill(monkeypatch):
+    """backfill(start, end): put common.isone in backfill mode, as the env vars would."""
+    import common.isone as isone
+
+    def _set(start, end):
+        monkeypatch.setattr(isone, 'BACKFILL_START', start)
+        monkeypatch.setattr(isone, 'BACKFILL_END', end)
+        monkeypatch.setattr(isone, 'BACKFILL_PAUSE_SECONDS', 0)
+    return _set
+
+
+def test_isone_normal_run_is_one_batch():
+    from common.isone import day_batches, days_to_fetch
+
+    assert day_batches() == [days_to_fetch()]
+    assert day_batches(['20261101']) == [['20261101']]
+
+
+def test_isone_backfill_batches_the_range_by_month(backfill):
+    from common.isone import BACKFILL_BATCH_DAYS, day_batches
+
+    backfill('20260101', '20260305')
+    batches = day_batches(['ignored'])
+
+    # 64 days: Jan 1–31, Feb 1–Mar 3, Mar 4–5
+    assert [len(batch) for batch in batches] == [BACKFILL_BATCH_DAYS, BACKFILL_BATCH_DAYS, 2]
+    assert batches[0][0] == '20260101' and batches[-1][-1] == '20260305'
+
+
+@pytest.mark.parametrize('start, end', [('20260305', '20260101'), ('20260101', None), ('not-a-day', '20260101')])
+def test_isone_backfill_bad_range_fails(backfill, start, end):
+    from common.isone import day_batches
+
+    backfill(start, end)
+    with pytest.raises(SystemExit):
+        day_batches()
+
+
+def test_rt_lmp_backfill_pulls_final_prices_only(run_job, isone_login, backfill):
+    from common.isone import PRICING_LOCATIONS
+
+    backfill('20250101', '20250102')
+    calls = 2 * len(PRICING_LOCATIONS)
+    df = run_job('isone-rt-lmp', [lmp_day('2025-01-01T12:00:00.000-05:00')] * calls)
+
+    urls = [request['url'] for request in run_job.requests]
+    assert len(urls) == calls
+    assert all('/fiveminutelmp/final/day/2025010' in url for url in urls)
+    assert set(df['LmpType']) == {'final'}
+
+
+def test_fuel_mix_backfill_loads_each_batch(run_job, isone_login, backfill):
+    """A long range loads month by month, not all at once."""
+    backfill('20260101', '20260210')
+    run_job('isone-fuel-mix', [fuel_mix_day(('2026-01-01T12:00:00.000-05:00', {'Nuclear': 3300}))] * 41)
+
+    assert [len(df) for df in run_job.loads] == [31, 10]
+
+
+def test_rt_lmp_hourly_refuses_to_run_on_a_schedule(run_job, isone_login):
+    with pytest.raises(SystemExit):
+        run_job('isone-rt-lmp-hourly', [])
+    assert run_job.requests == []
+
+
+def test_rt_lmp_hourly_backfill(run_job, isone_login, backfill):
+    from common.isone import PRICING_LOCATIONS
+
+    backfill('20200101', '20200101')
+    hour = lmp_day('2020-01-01T00:00:00.000-05:00', wrapper='HourlyLmps')
+    df = run_job('isone-rt-lmp-hourly', [hour] * len(PRICING_LOCATIONS))
+
+    assert all('/hourlylmp/rt/final/day/20200101/location/' in request['url'] for request in run_job.requests)
+    assert len(df) == len(PRICING_LOCATIONS)
+    assert df['BeginDate'].iloc[0] == pd.Timestamp('2020-01-01T05:00', tz='UTC')

@@ -62,12 +62,13 @@ resource "google_secret_manager_secret_iam_member" "ingest_reads_source_secrets"
   member    = google_service_account.ingest.member
 }
 
-# The scheduler may start exactly these jobs (run.invoker includes run.jobs.run)
+# The scheduler may start exactly the jobs it triggers (run.invoker includes
+# run.jobs.run); backfill-only jobs are started by hand
 resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_ingest" {
-  for_each = google_cloud_run_v2_job.ingest
+  for_each = local.scheduled_ingest_jobs
 
-  name     = each.value.name
-  location = each.value.location
+  name     = google_cloud_run_v2_job.ingest[each.key].name
+  location = google_cloud_run_v2_job.ingest[each.key].location
   role     = "roles/run.invoker"
   member   = google_service_account.job_scheduler.member
 }

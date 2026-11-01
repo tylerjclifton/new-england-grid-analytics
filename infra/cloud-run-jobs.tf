@@ -18,6 +18,9 @@ locals {
 
   # One entry per ingest job. Key = job folder under ingest/ = bronze table
   # name with "-" for "_" (e.g. openmeteo-forecast → bronze.openmeteo_forecast).
+  #   schedule cron, or null for a backfill-only job (run by hand, decision 0013)
+  #   timeout  per scheduled run; a backfill execution sets its own
+  #            (--task-timeout, docs/runbook.md)
   #   secrets  env var name → Secret Manager secret (secrets.tf) the job reads
   #   env      plain job-specific settings
   ingest_jobs = {
@@ -63,7 +66,17 @@ locals {
       secrets  = local.isone_login
       env      = {}
     }
+    "isone-rt-lmp-hourly" = {
+      schedule = null # Backfill only: hourly prices from before the five-minute history
+      memory   = "512Mi"
+      timeout  = "300s"
+      secrets  = local.isone_login
+      env      = {}
+    }
   }
+
+  # The jobs Cloud Scheduler triggers (cloud-scheduler.tf, iam.tf)
+  scheduled_ingest_jobs = { for job, config in local.ingest_jobs : job => config if config.schedule != null }
 
   # The ISO Express login every ISO-NE job reads (ingest/common/isone.py)
   isone_login = {

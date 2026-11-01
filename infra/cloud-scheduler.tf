@@ -3,7 +3,8 @@
 #
 # Each trigger POSTs to the Cloud Run Admin API's jobs.run endpoint as the
 # job-scheduler service account, which may run only these jobs (iam.tf).
-# Ingest schedules come from local.ingest_jobs (cloud-run-jobs.tf).
+# Ingest schedules come from local.ingest_jobs (cloud-run-jobs.tf); backfill-only
+# jobs have none.
 # ══════════════════════════════════════════════════════════════════════════════
 
 locals {
@@ -13,7 +14,7 @@ locals {
 # ── Ingest triggers ───────────────────────────────────────────────────────────
 
 resource "google_cloud_scheduler_job" "ingest" {
-  for_each = local.ingest_jobs
+  for_each = local.scheduled_ingest_jobs
 
   name             = "ingest-${each.key}"
   schedule         = each.value.schedule

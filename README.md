@@ -53,6 +53,7 @@ Each layer is its own BigQuery dataset.
 | `isone_zonal_load` | five-minute interval × load zone × ingest run | ~3,500 rows per run, ~400 MB/year |
 | `isone_rt_lmp` | five-minute interval × location × version (prelim/final) × ingest run | ~9,900 rows per run, ~1.5 GB/year: the largest table ([0012](docs/decisions/0012-isone-prices.md)) |
 | `isone_da_lmp` | hour × location × ingest run | ~440 rows per run, ~65 MB/year |
+| `isone_rt_lmp_hourly` | hour × location × ingest run | Backfill only: hourly real-time prices for 2019–2024, before the five-minute history ([0013](docs/decisions/0013-isone-backfill.md)) |
 
 | Silver model | Grain | What it produces |
 |---|---|---|
@@ -158,13 +159,14 @@ ingest/                    One shared image for every ingest job
   common/run.py            What every run shares: job name, run timestamp, logging, failure reports
   common/fetch.py          fetch(): HTTP GET that fails the job cleanly (step 1)
   common/load.py           append_to_bronze(): load into bronze (step 3)
-  common/isone.py          ISO-NE API: login, days and pricing locations to pull, response unwrapping
+  common/isone.py          ISO-NE API: login, days and pricing locations to pull, backfill mode, response unwrapping
   openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
   isone-fuel-mix/          ISO-NE generation by fuel (every 6 hours)
   isone-system-load/       ISO-NE five-minute system load (every 6 hours)
   isone-zonal-load/        ISO-NE five-minute load per load zone (every 6 hours)
   isone-rt-lmp/            ISO-NE five-minute real-time prices, prelim and final (every 6 hours)
   isone-da-lmp/            ISO-NE hourly day-ahead prices (every 6 hours)
+  isone-rt-lmp-hourly/     ISO-NE hourly real-time prices, 2019–2024 (backfill only)
   tests/                   Job tests against canned API responses
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds

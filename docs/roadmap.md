@@ -4,7 +4,7 @@ Planned work, roughly in order, with why. Move an item to a [decision record](de
 
 ## Next
 
-1. **ISO-NE backfill.** Generation by fuel, system and zonal load, and real-time and day-ahead prices are ingesting ([0010](decisions/0010-isone-day-files.md), [0012](decisions/0012-isone-prices.md)). Next: history by day, sized first (fuel mix to ~2020, system load to ~2024, zonal load to ~2025, final prices as far as they go).
+1. **ISO-NE backfill** ([0013](decisions/0013-isone-backfill.md)): run each job's backfill ([runbook](runbook.md#backfill-a-feed)), rebuild silver, and add silver models for `isone_rt_lmp_hourly`. Re-probe the history start dates in a few months to learn whether they're rolling windows.
 2. **ISO-NE's own forecasts** (`/hourlyloadforecast`, `/sevendayforecast`, `/sevendaywindpowerforecast`): the benchmark a load model has to beat (EIA-930's copy of ISO-NE's day-ahead forecast was off by 3.2% on average in January–June 2026).
 3. **EIA-930** (the API key is in Secret Manager, checked 2026-10-31; history can come from the free bulk files): hourly demand, the day-ahead demand forecast, and generation by fuel for ISO-NE back to July 2015, as long history for modeling. EIA regenerates its files daily, so re-pull a lookback window and keep the latest version ([0001](decisions/0001-append-only-bronze.md)).
 4. **Weather backfill.** Open-Meteo's historical forecast API (past forecasts, for honest model training) and archive API (reanalysis, the best estimate of what happened), into separate bronze tables, so models have years of weather before 2026-10-29 ([0009](decisions/0009-weather-per-load-zone.md)).

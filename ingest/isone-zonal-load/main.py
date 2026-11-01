@@ -13,7 +13,8 @@ Source:     ISO-NE web services, /fiveminuteestimatedzonalload/day/{day} (ISO
 Cadence:    Every 6 hours
 Each run:   Every interval for yesterday and today (Eastern days, see
             common/isone.py); re-pulling yesterday catches its last hours and
-            any revision.
+            any revision. A backfill pulls a day range instead, a month at a
+            time (decision 0013).
 Writes to:  bronze.isone_zonal_load (append) — one row per interval × load
             zone × run
 """
@@ -22,26 +23,29 @@ Writes to:  bronze.isone_zonal_load (append) — one row per interval × load
 import logging
 
 # Import shared ingest helpers
-from common.isone import fetch_days, to_frame
+from common.isone import day_batches, fetch_days, to_frame
 from common.load import append_to_bronze
 
 # Record fields, kept under ISO-NE's names (bronze keeps the source's names)
 MEASURES = ['estimated_load_mw', 'estimated_btm_pv_mw']
 COLUMNS  = ['interval_begin_date', 'load_zone_id', 'load_zone_name', *MEASURES]
 
-# ── Fetch ─────────────────────────────────────────────────────────────────────
+# One batch of days at a time (a single batch unless backfilling)
+for days in day_batches():
 
-records = fetch_days('fiveminuteestimatedzonalload')
+    # ── Fetch ─────────────────────────────────────────────────────────────────
 
-# ── Shape ─────────────────────────────────────────────────────────────────────
+    records = fetch_days('fiveminuteestimatedzonalload', days)
 
-df = (
-    to_frame(records, COLUMNS, time_column='interval_begin_date')
-    .astype({'load_zone_id': 'int64', **dict.fromkeys(MEASURES, 'float64')})
-)
-if not df.empty:
-    logging.info(f"Shaped {len(df)} rows: {df['interval_begin_date'].min()} to {df['interval_begin_date'].max()}")
+    # ── Shape ─────────────────────────────────────────────────────────────────
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+    df = (
+        to_frame(records, COLUMNS, time_column='interval_begin_date')
+        .astype({'load_zone_id': 'int64', **dict.fromkeys(MEASURES, 'float64')})
+    )
+    if not df.empty:
+        logging.info(f"Shaped {len(df)} rows: {df['interval_begin_date'].min()} to {df['interval_begin_date'].max()}")
 
-append_to_bronze(df)
+    # ── Write ─────────────────────────────────────────────────────────────────
+
+    append_to_bronze(df)
