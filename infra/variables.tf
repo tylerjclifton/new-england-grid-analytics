@@ -53,6 +53,12 @@ variable "weather_forecast_ingestion_schedule" {
   default     = "5 */6 * * *"
 }
 
+variable "weather_archive_ingestion_schedule" {
+  description = "Cron for Open-Meteo reanalysis ingestion. Daily at 04:45, before the 06:20 transform; each run re-pulls the last two weeks through yesterday (decision 0015)."
+  type        = string
+  default     = "45 4 * * *"
+}
+
 variable "isone_ingestion_schedule" {
   description = "Cron for the ISO-NE ingest jobs (fuel mix, load, prices). Every 6 hours at :10; each run pulls whole days, so the cadence sets latency, not completeness (decisions 0010, 0012)."
   type        = string

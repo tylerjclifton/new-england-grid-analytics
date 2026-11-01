@@ -32,6 +32,20 @@ locals {
       secrets  = {}
       env      = {}
     }
+    "openmeteo-archive" = {
+      schedule = var.weather_archive_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "900s" # One request (two weeks, every load zone)
+      secrets  = {}
+      env      = {}
+    }
+    "openmeteo-previous-runs" = {
+      schedule = null # Backfill only: past forecasts before 2026-10-29
+      memory   = "512Mi"
+      timeout  = "900s"
+      secrets  = {}
+      env      = {}
+    }
     "isone-fuel-mix" = {
       schedule = var.isone_ingestion_schedule
       memory   = "512Mi"

@@ -20,6 +20,7 @@ A data engineering and modeling project on the New England electric grid: what i
 | ISO-NE web services | Hourly day-ahead prices at the Hub and eight load zones | Every 6 hours | Today and tomorrow (tomorrow once the market clears, around midday) |
 | EIA-930 API | ISO New England hourly demand, ISO-NE's day-ahead demand forecast, net generation, interchange | Daily | The last 14 days (EIA revises recent hours; [0014](docs/decisions/0014-eia-930.md)) |
 | EIA-930 API | ISO New England hourly net generation by fuel | Daily | The last 14 days |
+| Open-Meteo archive API | Hourly reanalysis (the best estimate of past weather) for the same points and variables | Daily | The last 14 days through yesterday ([0015](docs/decisions/0015-weather-history.md)) |
 
 The dbt transform runs every 6 hours, after the ingest runs.
 
@@ -59,6 +60,8 @@ Each layer is its own BigQuery dataset.
 | `eia_region_data` | hour × measure × ingest run | ~1,300 rows per daily run (two weeks re-pulled), ~50 MB/year; history from 2019 ([0014](docs/decisions/0014-eia-930.md)) |
 | `eia_fuel_type_data` | hour × fuel × ingest run | ~3,700 rows per daily run, ~115 MB/year; history from 2019 |
 | `eia_region_data_bulk` | hour × measure × ingest run | Backfill only: 2015-07 to 2018-12 from EIA's bulk files, in the API's shape |
+| `openmeteo_archive` | load zone × hour × ingest run | ~2,700 rows per daily run (two weeks re-pulled); backfilled from 2015-07 ([0015](docs/decisions/0015-weather-history.md)) |
+| `openmeteo_previous_runs` | load zone × hour × lead (1–2 days) × ingest run | Backfill only: past forecasts as issued, 2021 to 2026-10-28, for training models on what was known |
 
 | Silver model | Grain | What it produces |
 |---|---|---|
@@ -172,7 +175,10 @@ ingest/                    One shared image for every ingest job
   common/isone.py          ISO-NE API: login, days and pricing locations to pull, response unwrapping
   common/eia.py            EIA API: key, hours to pull, paging, shaping
   common/backfill.py       Backfill mode shared by every job that has one (day range, monthly batches)
+  common/openmeteo.py      Open-Meteo: load zone points, variables, request settings, shaping
   openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
+  openmeteo-archive/       Open-Meteo hourly reanalysis per load zone (daily)
+  openmeteo-previous-runs/ Open-Meteo past forecasts, 1–2 days ahead (backfill only)
   isone-fuel-mix/          ISO-NE generation by fuel (every 6 hours)
   isone-system-load/       ISO-NE five-minute system load (every 6 hours)
   isone-zonal-load/        ISO-NE five-minute load per load zone (every 6 hours)

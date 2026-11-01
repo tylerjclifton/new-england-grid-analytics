@@ -30,6 +30,25 @@ locals {
   # How long local test data lives in the dev sandboxes
   dev_retention_ms = 7 * 24 * 60 * 60 * 1000
 
+  # Every Open-Meteo table's columns: the point (load zone, city, grid cell),
+  # the hour, and the hourly variables, in source units (ingest/common/openmeteo.py)
+  openmeteo_columns = [
+    { name = "load_zone", type = "STRING", description = "ISO-NE load zone the point represents (ME, NH, VT, CT, RI, SEMA, WCMA, NEMA); set by the ingest, not the API" },
+    { name = "location_name", type = "STRING", description = "City the point is placed at (e.g. Boston); set by the ingest" },
+    { name = "latitude", type = "FLOAT", description = "Grid-cell latitude Open-Meteo answered for (snapped from the requested point)" },
+    { name = "longitude", type = "FLOAT", description = "Grid-cell longitude Open-Meteo answered for" },
+    { name = "elevation", type = "FLOAT", description = "Grid-cell elevation, m" },
+    { name = "time", type = "TIMESTAMP", description = "Hour the values are for (UTC). Instantaneous values are at this time; precipitation, snowfall, and radiation cover the hour ending at it" },
+    { name = "temperature_2m", type = "FLOAT", description = "Air temperature at 2 m, °C" },
+    { name = "dew_point_2m", type = "FLOAT", description = "Dew point at 2 m, °C" },
+    { name = "cloud_cover", type = "FLOAT", description = "Total cloud cover, %" },
+    { name = "shortwave_radiation", type = "FLOAT", description = "Global horizontal irradiance, W/m², mean over the preceding hour (drives solar output)" },
+    { name = "wind_speed_10m", type = "FLOAT", description = "Wind speed at 10 m, m/s" },
+    { name = "wind_speed_100m", type = "FLOAT", description = "Wind speed at 100 m (turbine hub height), m/s" },
+    { name = "precipitation", type = "FLOAT", description = "Total precipitation (rain + melted snow), mm, preceding hour" },
+    { name = "snowfall", type = "FLOAT", description = "Snowfall, cm, preceding hour" },
+  ]
+
   # The fields every ISO-NE price record has (both price tables); the nested
   # Location is flattened into LocId / LocType / LocName by the ingest
   isone_lmp_columns = [
@@ -61,22 +80,21 @@ locals {
     openmeteo_forecast = {
       description = "Open-Meteo hourly weather forecasts, one point per ISO-NE load zone (decision 0009), in source units. Every run's forecast is kept: the hours ahead are what was predicted at ingested_at, the past day is the model's best estimate. Grain: load zone × hour × ingest run."
       clustering  = ["load_zone", "time"]
-      columns = [
-        { name = "load_zone", type = "STRING", description = "ISO-NE load zone the point represents (ME, NH, VT, CT, RI, SEMA, WCMA, NEMA); set by the ingest, not the API" },
-        { name = "location_name", type = "STRING", description = "City the point is placed at (e.g. Boston); set by the ingest" },
-        { name = "latitude", type = "FLOAT", description = "Grid-cell latitude Open-Meteo answered for (snapped from the requested point)" },
-        { name = "longitude", type = "FLOAT", description = "Grid-cell longitude Open-Meteo answered for" },
-        { name = "elevation", type = "FLOAT", description = "Grid-cell elevation, m" },
-        { name = "time", type = "TIMESTAMP", description = "Hour the values are for (UTC). Instantaneous values are at this time; precipitation, snowfall, and radiation cover the hour ending at it" },
-        { name = "temperature_2m", type = "FLOAT", description = "Air temperature at 2 m, °C" },
-        { name = "dew_point_2m", type = "FLOAT", description = "Dew point at 2 m, °C" },
-        { name = "cloud_cover", type = "FLOAT", description = "Total cloud cover, %" },
-        { name = "shortwave_radiation", type = "FLOAT", description = "Global horizontal irradiance, W/m², mean over the preceding hour (drives solar output)" },
-        { name = "wind_speed_10m", type = "FLOAT", description = "Wind speed at 10 m, m/s" },
-        { name = "wind_speed_100m", type = "FLOAT", description = "Wind speed at 100 m (turbine hub height), m/s" },
-        { name = "precipitation", type = "FLOAT", description = "Total precipitation (rain + melted snow), mm, preceding hour" },
-        { name = "snowfall", type = "FLOAT", description = "Snowfall, cm, preceding hour" },
-      ]
+      columns     = local.openmeteo_columns
+    }
+
+    openmeteo_archive = {
+      description = "Open-Meteo hourly reanalysis (ERA5-based: the best estimate of what the weather was), one point per ISO-NE load zone, in source units (decision 0015). Each daily run re-pulls two weeks through yesterday; backfilled from 2015-07. Grain: load zone × hour × ingest run."
+      clustering  = ["load_zone", "time"]
+      columns     = local.openmeteo_columns
+    }
+
+    openmeteo_previous_runs = {
+      description = "Open-Meteo past forecasts as issued, 1 and 2 days ahead, one point per ISO-NE load zone, in source units (decision 0015): what a day-ahead model may train on. Backfill only, 2021 to 2026-10-28; temperature throughout, the other variables from early 2024 (null before). Grain: load zone × hour × lead × ingest run."
+      clustering  = ["load_zone", "time"]
+      columns = concat(local.openmeteo_columns, [
+        { name = "lead_days", type = "INTEGER", description = "How many days before the hour the forecast was issued (1 or 2): the model run N days earlier" },
+      ])
     }
 
     isone_fuel_mix = {

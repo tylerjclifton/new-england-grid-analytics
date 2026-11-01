@@ -55,8 +55,9 @@ Hourly data for every US balancing authority; ISO-NE is `ISNE`. Explored 2026-10
 Weather APIs, no key; free for non-commercial use up to 10,000 calls/day ([0009](decisions/0009-weather-per-load-zone.md)). Checked 2026-10-29.
 
 - **Forecast:** `api.open-meteo.com/v1/forecast`. Comma-separated latitudes and longitudes return a JSON list in request order (a single point returns an object). `timezone=GMT` gives UTC; `past_days` and `forecast_days` set the window (1 + 7 days = 192 hours).
-- **Historical forecasts:** `historical-forecast-api.open-meteo.com/v1/forecast` (past forecasts, for training models on what was known at the time).
-- **Reanalysis archive:** `archive-api.open-meteo.com/v1/archive` (best estimate of past weather, back decades, a few days' lag).
+- **Reanalysis archive:** `archive-api.open-meteo.com/v1/archive`: the best estimate of past weather, back decades, every variable; current to yesterday (checked 2026-11-01). Ingested as `bronze.openmeteo_archive` ([0015](decisions/0015-weather-history.md)).
+- **Previous runs:** `previous-runs-api.open-meteo.com/v1/forecast`: for each hour, `<variable>_previous_day<N>` is what the run N days earlier forecast. Temperature from 2021 (with gaps: none on 2024-01-15); dew point, cloud cover and radiation from about 2024-02, `wind_speed_100m` from about 2024-03. Ingested as `bronze.openmeteo_previous_runs`.
+- **Historical forecasts:** `historical-forecast-api.open-meteo.com/v1/forecast`: the first hours of each run stitched together, from 2016 (`wind_speed_100m` missing in 2018). Not ingested: close to the reanalysis, and not what was known a day ahead.
 - Grid-cell coordinates come back snapped from the requested point (Boston 42.36, −71.06 → 42.365, −71.062).
 
 ## Not yet explored

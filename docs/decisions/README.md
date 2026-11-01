@@ -18,6 +18,7 @@ One short file per decision that shaped this project: the situation, what was de
 | [0012](0012-isone-prices.md) | ISO-NE prices: five-minute real-time (preliminary, then final) and hourly day-ahead, at the Hub and eight load zones | Accepted |
 | [0013](0013-isone-backfill.md) | ISO-NE backfill: the scheduled jobs run once over a day range; hourly real-time prices before 2024 | Accepted |
 | [0014](0014-eia-930.md) | EIA-930: the API daily from 2019, the bulk files once for 2015–2018 | Accepted |
+| [0015](0015-weather-history.md) | Weather history: reanalysis from 2015 for what happened, past forecasts from 2021 for what was known | Accepted |
 
 **Adding one:** copy the shape of an existing file, take the next number, add a row here.
 

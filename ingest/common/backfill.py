@@ -53,7 +53,7 @@ def backfill_batches():
     return [days[i:i + BATCH_DAYS] for i in range(0, len(days), BATCH_DAYS)]
 
 
-def pause():
-    """Wait between calls during a backfill; no-op otherwise."""
+def pause(seconds=None):
+    """Wait between calls during a backfill (PAUSE_SECONDS, or a source's own `seconds`); no-op otherwise."""
     if is_backfill():
-        time.sleep(PAUSE_SECONDS)
+        time.sleep(PAUSE_SECONDS if seconds is None else seconds)

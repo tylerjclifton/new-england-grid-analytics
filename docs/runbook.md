@@ -67,6 +67,8 @@ gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --task-timeout=3
 | `ingest-eia-region-data` | 20190101–20261031 | ~95 | 5 min |
 | `ingest-eia-fuel-type-data` | 20190101–20261031 | ~190 | 10 min |
 | `ingest-eia-region-data-bulk` (backfill only) | 20150701–20181231 | 7 files | 5 min |
+| `ingest-openmeteo-archive` | 20150701–20261031 | ~140 | 15 min |
+| `ingest-openmeteo-previous-runs` (backfill only) | 20210101–20261028 | ~70 | 10 min |
 
 **Run ISO-NE backfills one at a time**: ISO-NE refuses a caller making more than a few day-file calls a second (HTTP 429), so backfills pause 1 s between calls ([0013](decisions/0013-isone-backfill.md)). `fetch()` retries a 429 for about 8 minutes; a block that outlasts that fails the run, which emails an alert. Add `--async` to start it and return; follow it in Cloud Run → Jobs → the job → Executions. Then **rebuild that feed's silver** so no backfilled row is skipped (see the next section): e.g. `--select isone_fuel_mix__latest`. Check the result with a count by month in bronze and silver.
 

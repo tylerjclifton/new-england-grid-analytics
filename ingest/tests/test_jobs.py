@@ -307,7 +307,7 @@ def backfill(monkeypatch):
     def _set(start, end):
         monkeypatch.setattr(backfill_mode, 'BACKFILL_START', start)
         monkeypatch.setattr(backfill_mode, 'BACKFILL_END', end)
-        monkeypatch.setattr(backfill_mode, 'PAUSE_SECONDS', 0)
+        monkeypatch.setattr(backfill_mode.time, 'sleep', lambda seconds: None)  # no pauses between calls
     return _set
 
 
@@ -497,3 +497,58 @@ def test_eia_bulk_fetches_each_half_year_once(run_job, backfill):
 def test_eia_bulk_refuses_to_run_on_a_schedule(run_job):
     with pytest.raises(SystemExit):
         run_job('eia-region-data-bulk', [])
+
+
+# ── Open-Meteo history (openmeteo-archive, openmeteo-previous-runs; decision 0015) ──
+
+def test_archive_normal_run_is_the_last_two_weeks_through_yesterday(run_job):
+    run_job('openmeteo-archive', [openmeteo_response()])
+
+    params = run_job.requests[0]['params']
+    assert run_job.requests[0]['url'] == 'https://archive-api.open-meteo.com/v1/archive'
+    start, end = pd.Timestamp(params['start_date']), pd.Timestamp(params['end_date'])
+    assert end - start == pd.Timedelta(days=13)
+    assert end.date() < pd.Timestamp.now(tz='UTC').date()
+    assert params['timezone'] == 'GMT' and len(params['latitude'].split(',')) == len(ZONES)
+
+
+def test_archive_backfill_one_call_per_month(run_job, backfill):
+    backfill('20150701', '20150815')
+    run_job('openmeteo-archive', [openmeteo_response()] * 2)
+
+    assert [(r['params']['start_date'], r['params']['end_date']) for r in run_job.requests] == [
+        ('2015-07-01', '2015-07-31'), ('2015-08-01', '2015-08-15')]
+    assert len(run_job.loads) == 2
+    assert len(run_job.loads[0]) == len(ZONES) * 2  # zones × hours in the canned response
+
+
+def previous_runs_response():
+    """A previous-runs response for every zone: day-1 values 1.0, day-2 values 2.0."""
+    points = []
+    for index in range(len(ZONES)):
+        hourly = {'time': ['2024-06-01T00:00', '2024-06-01T01:00']}
+        for lead in (1, 2):
+            for variable in VARIABLES:
+                second_hour = None if variable == 'snowfall' else float(lead)
+                hourly[f"{variable}_previous_day{lead}"] = [float(lead), second_hour]
+        points.append({'latitude': 40.0 + index, 'longitude': -70.0 - index, 'elevation': 10.0, 'hourly': hourly})
+    return points
+
+
+def test_previous_runs_one_row_per_zone_hour_and_lead(run_job, backfill):
+    backfill('20240601', '20240601')
+    df = run_job('openmeteo-previous-runs', [previous_runs_response()])
+
+    assert run_job.requests[0]['url'] == 'https://previous-runs-api.open-meteo.com/v1/forecast'
+    assert 'temperature_2m_previous_day2' in run_job.requests[0]['params']['hourly'].split(',')
+    assert len(df) == len(ZONES) * 2 * 2  # zones × hours × leads
+    assert not df.duplicated(['load_zone', 'time', 'lead_days']).any()
+    assert set(VARIABLES) <= set(df.columns) and not any('previous_day' in column for column in df.columns)
+    by_lead = df.groupby('lead_days')['temperature_2m'].first()
+    assert (by_lead[1], by_lead[2]) == (1.0, 2.0)
+    assert df['snowfall'].isna().sum() == len(ZONES) * 2  # nulls kept as nulls
+
+
+def test_previous_runs_refuses_to_run_on_a_schedule(run_job):
+    with pytest.raises(SystemExit):
+        run_job('openmeteo-previous-runs', [])
