@@ -46,7 +46,7 @@ Each layer is its own BigQuery dataset.
 |---|---|---|---|
 | `bronze` | Append-only tables (Terraform-managed, deletion-protected) | Ingest jobs | Raw history. Each run appends what it saw; rows are never updated or deleted, so revisions and superseded forecasts are kept ([0001](docs/decisions/0001-append-only-bronze.md)) |
 | `silver` | Views, or incremental tables over growing bronze | dbt | Every model is `<bronze table>__<step>`: `__base` is each source's cleaned copy (renamed, typed, converted); other steps apply one rule each ([0007](docs/decisions/0007-silver-naming-and-materialization.md)) |
-| `gold` | Tables, rebuilt every run | dbt | Cross-source tables for the dashboard and models (none yet) |
+| `gold` | Tables, rebuilt every run | dbt | Cross-source tables for the dashboard and models: hourly, system-wide and by load zone ([0016](docs/decisions/0016-first-gold-tables.md)) |
 
 | Bronze table | Grain | How bronze grows |
 |---|---|---|
@@ -85,6 +85,16 @@ Each layer is its own BigQuery dataset.
 | `eia_region_data__by_hour` | hour | Demand, forecast, generation and interchange side by side. A view |
 | `eia_fuel_type_data__base` / `__latest` | hour × fuel (× ingest run) | EIA-930 generation by fuel, 2019 on, by hour start. View / incremental table |
 | `isone_pricing_locations` (seed) | location | ISO-NE location ID → project code (HUB, ME … NEMA), kept in `transform/seeds/` |
+| `isone_system_load__hourly`, `isone_zonal_load__hourly` | hour (× zone) | Five-minute load averaged to the hour. Views |
+| `isone_fuel_mix__hourly` | hour | MW per fuel averaged over the hour's snapshots (absent = 0), and the marginal fuel. A view |
+| `isone_rt_lmp__hourly` | hour × location | Real-time price per hour, 2019 on: the five-minute mean and peak from 2024, the hourly backfill before. A view |
+
+| Gold table | Grain | What it holds |
+|---|---|---|
+| `grid_hourly` | hour, from 2015-07 | EIA demand and ISO-NE's day-ahead forecast; system load with and without rooftop solar; generation by fuel and the marginal fuel; Hub real-time (with five-minute peak) and day-ahead prices; Eastern calendar |
+| `grid_zone_hourly` | hour × load zone, from 2015-07 | Weather (reanalysis); zone load and rooftop solar; zone real-time and day-ahead prices and the spread to the Hub; Eastern calendar |
+
+Each is an hour spine with every source left-joined: a source that doesn't cover an hour shows as null (coverage starts by column, listed in each table's description).
 
 **Forecast vs. best estimate.** Explaining what happened uses the reanalysis (`openmeteo_archive__latest`, from 2015) or the forecast's `__latest`. A model that predicts ahead must use what was known at the time: `openmeteo_previous_runs__latest` before 2026-10-29, `openmeteo_forecast__base` at the right `lead_hours` after, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md), [0015](docs/decisions/0015-weather-history.md)). A day ahead, the forecast's temperature was off by 2.4°F on average (2021–2026).
 
@@ -105,7 +115,7 @@ Every Cloud Run job logs one structured failure report when it fails (`ingest/co
 | Datasets | Medallion layer | `bronze`, `silver`, `gold` |
 | Bronze tables | `<source>_<entity>` | `openmeteo_forecast` |
 | Silver models | `<bronze table>__<step>`; `__base` is the cleaned copy | `openmeteo_forecast__base`, `openmeteo_forecast__latest` |
-| Gold tables | `<domain>_<entity>` | |
+| Gold tables | `<domain>_<entity>` | `grid_hourly`, `grid_zone_hourly` |
 | Seeds | `<source>_<entity>`, small reference data in `transform/seeds/`, loaded into silver | `isone_pricing_locations` |
 | Ingest jobs | `ingest/<source>-<entity>/main.py` → `bronze.<source>_<entity>` | `ingest/openmeteo-forecast` → `bronze.openmeteo_forecast` |
 | Bronze columns | Source system's names and units, plus audit columns | `temperature_2m`, `GenMw`, `SystemLoadBtmPv` |
@@ -194,8 +204,9 @@ ingest/                    One shared image for every ingest job
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds
   models/silver/           <bronze table>__<step> models
+  models/gold/             Cross-source hourly tables
   seeds/                   Reference data (ISO-NE location IDs → load zone codes)
-  macros/                  keep_latest_version (optionally preferring final versions), last_processed_run, openmeteo_weather_columns, dataset naming
+  macros/                  keep_latest_version (optionally preferring final versions), last_processed_run, openmeteo_weather_columns, eastern_calendar_columns, dataset naming
   run.py                   Transform entrypoint: dbt build, source freshness, failure report
 scripts/build-image.sh     Build and push a component image
 ```

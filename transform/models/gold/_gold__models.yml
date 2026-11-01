@@ -1,0 +1,128 @@
+version: 2
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gold — cross-source tables for the dashboard and models, rebuilt every run
+#
+# Each is an hour spine from 2015-07-01 (Eastern midnight) with every source
+# left-joined, so a source that doesn't cover an hour shows as null rather than
+# dropping the hour. Hours are stored as UTC hour starts; Eastern calendar
+# columns are derived (macros/eastern_calendar_columns.sql, decision 0002).
+#
+# Tests check the grain (one row per key, no gaps in the spine) and that the
+# joins didn't multiply rows. Value ranges are tested in silver.
+# ══════════════════════════════════════════════════════════════════════════════
+
+models:
+
+  - name: grid_hourly
+    description: >
+      One row per hour for New England as a whole: EIA demand and ISO-NE's
+      day-ahead forecast (2015-07 on), system load with and without rooftop
+      solar (2024 on), generation by fuel and the marginal fuel (2019-06 on),
+      and the Hub's real-time and day-ahead prices (2019 on).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+        data_tests: [not_null]
+      - name: date_local
+        description: Eastern date of the hour.
+        data_tests: [not_null]
+      - name: hour_local
+        description: Eastern hour, 0–23 (hour 1 twice when clocks fall back; no hour 2 when they spring forward).
+      - name: day_of_week
+        description: Eastern weekday, 1 = Sunday … 7 = Saturday.
+      - name: is_weekend
+        description: Saturday or Sunday, Eastern.
+      - name: eia_demand_mwh
+        description: Demand for the hour, MWh (EIA-930).
+      - name: eia_demand_forecast_mwh
+        description: ISO-NE's day-ahead forecast of the hour's demand, MWh (EIA-930).
+      - name: eia_net_generation_mwh
+        description: Net generation in New England, MWh (EIA-930).
+      - name: eia_interchange_mwh
+        description: Net interchange, MWh; negative when New England imported (EIA-930).
+      - name: load_mw
+        description: ISO-NE system load averaged over the hour, MW (= MWh).
+      - name: btm_solar_mw
+        description: ISO-NE's behind-the-meter (rooftop) solar estimate, averaged over the hour, MW.
+      - name: load_with_btm_solar_mw
+        description: load_mw plus rooftop solar, MW — the demand weather drives.
+      - name: natural_gas_mw
+        description: Generation from natural gas averaged over the hour, MW (ISO-NE fuel mix; absent counted as 0). The other *_mw fuel columns are the same for their fuel.
+      - name: total_generation_mw
+        description: All fuels' generation averaged over the hour, MW.
+      - name: marginal_fuel
+        description: The fuel setting the real-time price in most of the hour's fuel mix snapshots.
+      - name: rt_lmp_usd_mwh
+        description: The Hub's real-time price for the hour, $/MWh (final where published).
+      - name: rt_lmp_max_five_minute_usd_mwh
+        description: The Hub's highest five-minute real-time price in the hour, $/MWh (2024 on) — where spikes show.
+      - name: rt_is_final
+        description: Whether the hour's real-time price is ISO-NE's final (else preliminary).
+      - name: da_lmp_usd_mwh
+        description: The Hub's day-ahead price for the hour, $/MWh.
+
+  - name: grid_zone_hourly
+    description: >
+      One row per hour × load zone: the zone's weather (2015-07 on), its load
+      and rooftop solar (2025-02 on), and its real-time and day-ahead prices
+      with the spread to the Hub (2019 on).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, load_zone]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+        data_tests: [not_null]
+      - name: load_zone
+        description: ISO-NE load zone (ME, NH, VT, CT, RI, SEMA, WCMA, NEMA).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: date_local
+        description: Eastern date of the hour.
+      - name: hour_local
+        description: Eastern hour, 0–23.
+      - name: day_of_week
+        description: Eastern weekday, 1 = Sunday … 7 = Saturday.
+      - name: is_weekend
+        description: Saturday or Sunday, Eastern.
+      - name: temperature_f
+        description: Air temperature at the zone's point at the hour's start, °F (reanalysis).
+      - name: dew_point_f
+        description: Dew point at the hour's start, °F.
+      - name: cloud_cover_pct
+        description: Cloud cover at the hour's start, %.
+      - name: wind_speed_100m_ms
+        description: Wind speed at 100 m at the hour's start, m/s.
+      - name: solar_irradiance_w_m2
+        description: Mean irradiance over the hour, W/m² (Open-Meteo's value labelled at the hour's end).
+      - name: precipitation_mm
+        description: Precipitation over the hour, mm (labelled at the hour's end by Open-Meteo).
+      - name: snowfall_cm
+        description: Snowfall over the hour, cm (labelled at the hour's end by Open-Meteo).
+      - name: load_mw
+        description: The zone's estimated load averaged over the hour, MW.
+      - name: btm_solar_mw
+        description: The zone's rooftop solar estimate averaged over the hour, MW.
+      - name: load_with_btm_solar_mw
+        description: load_mw plus rooftop solar, MW.
+      - name: rt_lmp_usd_mwh
+        description: The zone's real-time price for the hour, $/MWh.
+      - name: rt_lmp_max_five_minute_usd_mwh
+        description: The zone's highest five-minute real-time price in the hour, $/MWh (2024 on).
+      - name: rt_congestion_usd_mwh
+        description: The congestion part of the zone's real-time price, $/MWh.
+      - name: rt_spread_to_hub_usd_mwh
+        description: The zone's real-time price minus the Hub's, $/MWh (congestion and losses).
+      - name: rt_is_final
+        description: Whether the hour's real-time price is final.
+      - name: da_lmp_usd_mwh
+        description: The zone's day-ahead price for the hour, $/MWh.
