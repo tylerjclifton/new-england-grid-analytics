@@ -74,6 +74,11 @@ Each layer is its own BigQuery dataset.
 | `isone_rt_lmp__latest` | five-minute interval × location | The best real-time price: final once published, preliminary until then. Incremental table |
 | `isone_da_lmp__base` | hour × location × ingest run | Every day-ahead price (Hub and zones). A view |
 | `isone_da_lmp__latest` | hour × location | The day-ahead price per hour and location. Incremental table |
+| `isone_rt_lmp_hourly__base` / `__latest` | hour × location (× ingest run) | Hourly real-time prices for 2019–2024, before the five-minute history ([0013](docs/decisions/0013-isone-backfill.md)). View / incremental table |
+| `eia_region_data__base` | hour × measure × ingest run | EIA-930 demand, ISO-NE's day-ahead forecast, generation and interchange: the API (2019 on) and bulk files (2015–2018) in one shape, relabelled from hour end to hour start. A view |
+| `eia_region_data__latest` | hour × measure | EIA's newest value for each hour and measure, 2015-07 on. Incremental table |
+| `eia_region_data__by_hour` | hour | Demand, forecast, generation and interchange side by side. A view |
+| `eia_fuel_type_data__base` / `__latest` | hour × fuel (× ingest run) | EIA-930 generation by fuel, 2019 on, by hour start. View / incremental table |
 | `isone_pricing_locations` (seed) | location | ISO-NE location ID → project code (HUB, ME … NEMA), kept in `transform/seeds/` |
 
 **Forecast vs. best estimate.** Explaining what happened uses `__latest`. A model that predicts ahead must use what was known at the time, from `__base` at the right `lead_hours`, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md)).
@@ -162,7 +167,7 @@ infra/                     Terraform: one file per resource family
   secrets.tf               Source credentials (values added by hand)
 ingest/                    One shared image for every ingest job
   common/run.py            What every run shares: job name, run timestamp, logging, failure reports
-  common/fetch.py          fetch(): HTTP GET that retries transient errors, redacts keys, and fails the job cleanly (step 1)
+  common/fetch.py          fetch(): HTTP GET that retries transient errors (rate limits too), redacts keys, and fails the job cleanly (step 1)
   common/load.py           append_to_bronze(): load into bronze (step 3)
   common/isone.py          ISO-NE API: login, days and pricing locations to pull, response unwrapping
   common/eia.py            EIA API: key, hours to pull, paging, shaping

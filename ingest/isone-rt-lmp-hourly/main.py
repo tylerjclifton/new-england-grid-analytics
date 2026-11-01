@@ -1,11 +1,12 @@
 """
 Ingest: ISO-NE hourly real-time prices (LMPs), final — backfill only
 
-Source:     ISO-NE web services, /hourlylmp/rt/final/day/{day}/location/{id}
-            (ISO Express login; decisions 0012, 0013). One call per day ×
-            pricing location: the Hub and the eight load zones
-            (common/isone.py). Each hourly price is the mean of that hour's
-            twelve five-minute prices.
+Source:     ISO-NE web services, /hourlylmp/rt/final/day/{day} (ISO Express
+            login; decisions 0012, 0013): one call per day for every location
+            (~1,200, 6 MB), keeping the Hub and the eight load zones
+            (common/isone.py), which keeps the backfill within ISO-NE's
+            request limit. Each hourly price is the mean of that hour's twelve
+            five-minute prices.
 Cadence:    None. Run as a one-off backfill (BACKFILL_START / BACKFILL_END),
             for the years before ISO-NE's five-minute history begins (2024);
             from there on isone-rt-lmp's five-minute prices cover real time,
@@ -19,7 +20,7 @@ import logging
 
 # Import shared ingest helpers
 from common.backfill import is_backfill
-from common.isone import PRICING_LOCATIONS, day_batches, fetch_days, flatten_location, to_frame
+from common.isone import at_pricing_location, day_batches, fetch_days, flatten_location, to_frame
 from common.load import append_to_bronze
 from common.run import fail
 
@@ -36,7 +37,7 @@ for days in day_batches():
 
     # ── Fetch ─────────────────────────────────────────────────────────────────
 
-    records = fetch_days('hourlylmp/rt/final', days, PRICING_LOCATIONS)
+    records = fetch_days('hourlylmp/rt/final', days, keep=at_pricing_location)
 
     # ── Shape ─────────────────────────────────────────────────────────────────
 

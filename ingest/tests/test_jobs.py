@@ -256,18 +256,26 @@ def test_rt_lmp_empty_final_days_still_load_prelim(run_job, isone_login):
     assert len(df) == per_type
 
 
-def test_da_lmp_pulls_today_and_tomorrow(run_job, isone_login):
-    from common.isone import PRICING_LOCATIONS
+def all_locations_day(begin):
+    """An all-locations hourly price response: the Hub, a load zone, and a network node we don't track."""
+    day = lmp_day(begin, wrapper='HourlyLmps')
+    others = [(4008, 'LOAD ZONE', '.Z.NEMASSBOST'), (321, 'NETWORK NODE', 'UN.FRNKLNSQ')]
+    for location_id, location_type, name in others:
+        day['HourlyLmps']['HourlyLmp'] += lmp_day(begin, location_id=location_id, location_type=location_type,
+                                                  location_name=name, wrapper='HourlyLmps')['HourlyLmps']['HourlyLmp']
+    return day
 
-    calls = 2 * len(PRICING_LOCATIONS)
-    df = run_job('isone-da-lmp', [lmp_day('2026-11-01T00:00:00.000-04:00', wrapper='HourlyLmps')] * calls)
+
+def test_da_lmp_pulls_today_and_tomorrow_for_tracked_locations(run_job, isone_login):
+    """One all-locations call per day; only the Hub and load zones are kept."""
+    df = run_job('isone-da-lmp', [all_locations_day('2026-11-01T00:00:00.000-04:00')] * 2)
 
     urls = [request['url'] for request in run_job.requests]
-    assert len(urls) == calls
-    assert all('/hourlylmp/da/final/day/' in url for url in urls)
-    days = sorted({url.split('/day/')[1].split('/')[0] for url in urls})
-    assert len(days) == 2 and pd.Timestamp(days[1]) - pd.Timestamp(days[0]) == pd.Timedelta(days=1)
-    assert len(df) == calls
+    assert len(urls) == 2
+    assert all('/hourlylmp/da/final/day/' in url and '/location/' not in url for url in urls)
+    days = sorted(url.split('/day/')[1].removesuffix('.json') for url in urls)
+    assert pd.Timestamp(days[1]) - pd.Timestamp(days[0]) == pd.Timedelta(days=1)
+    assert sorted(df['LocId'].unique()) == [4000, 4008]
 
 
 def zonal_load_day(*begins):
@@ -359,14 +367,12 @@ def test_rt_lmp_hourly_refuses_to_run_on_a_schedule(run_job, isone_login):
 
 
 def test_rt_lmp_hourly_backfill(run_job, isone_login, backfill):
-    from common.isone import PRICING_LOCATIONS
-
     backfill('20200101', '20200101')
-    hour = lmp_day('2020-01-01T00:00:00.000-05:00', wrapper='HourlyLmps')
-    df = run_job('isone-rt-lmp-hourly', [hour] * len(PRICING_LOCATIONS))
+    df = run_job('isone-rt-lmp-hourly', [all_locations_day('2020-01-01T00:00:00.000-05:00')])
 
-    assert all('/hourlylmp/rt/final/day/20200101/location/' in request['url'] for request in run_job.requests)
-    assert len(df) == len(PRICING_LOCATIONS)
+    assert [request['url'] for request in run_job.requests] == [
+        'https://webservices.iso-ne.com/api/v1.1/hourlylmp/rt/final/day/20200101.json']
+    assert sorted(df['LocId'].unique()) == [4000, 4008]  # the network node is dropped
     assert df['BeginDate'].iloc[0] == pd.Timestamp('2020-01-01T05:00', tz='UTC')
 
 

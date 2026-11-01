@@ -88,3 +88,38 @@ sources:
             # Every 6 hours; the slack covers one failed run
             warn_after: {count: 7, period: hour}
             error_after: {count: 13, period: hour}
+
+      - name: isone_rt_lmp_hourly
+        description: >
+          ISO-NE hourly real-time prices (final) at the Hub and eight load zones,
+          2019–2024: a one-off backfill of the years before the five-minute
+          history (decision 0013). No freshness check: nothing writes it on a
+          schedule. Grain: hour × location × ingest run.
+
+      - name: eia_region_data
+        description: >
+          EIA-930 hourly demand, day-ahead demand forecast, net generation and
+          interchange for ISO New England, from the API, 2019 on (decision 0014).
+          Hours labelled by their end. Grain: hour × measure × ingest run.
+        config:
+          freshness:
+            # Daily; the slack covers one failed run
+            warn_after: {count: 26, period: hour}
+            error_after: {count: 50, period: hour}
+
+      - name: eia_region_data_bulk
+        description: >
+          The same measures for 2015-07 to 2018-12, from EIA's bulk files in the
+          API's shape: a one-off backfill (decision 0014). No freshness check.
+          Grain: hour × measure × ingest run.
+
+      - name: eia_fuel_type_data
+        description: >
+          EIA-930 hourly net generation by fuel for ISO New England, from the
+          API, 2019 on (decision 0014). Hours labelled by their end. Grain: hour
+          × fuel × ingest run.
+        config:
+          freshness:
+            # Daily; the slack covers one failed run
+            warn_after: {count: 26, period: hour}
+            error_after: {count: 50, period: hour}

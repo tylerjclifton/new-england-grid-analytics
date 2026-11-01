@@ -373,6 +373,179 @@ models:
         description: The ingest run this version came from (UTC).
         data_tests: [not_null]
 
+  - name: isone_rt_lmp_hourly__base
+    description: >
+      Every backfilled hourly real-time price (2019–2024) at the Hub and eight
+      load zones, one row per hour × location × ingest run. No tests: they
+      would scan all of bronze (see header).
+    columns:
+      - name: hour_start_at
+        description: Start of the hour the price is for (UTC).
+      - name: location_code
+        description: HUB, or the load zone (ME … NEMA).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: isone_rt_lmp_hourly__latest
+    description: >
+      The final hourly real-time price per hour × location, 2019–2024, before
+      the five-minute history. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, location_code]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour the price is for (UTC).
+        data_tests: [not_null]
+      - name: location_code
+        description: HUB, or the load zone (ME … NEMA).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: location_id
+        description: ISO-NE location ID (4000 the Hub, 4001–4008 the load zones).
+      - name: lmp_usd_mwh
+        description: Hourly real-time locational marginal price, $/MWh (the mean of the hour's five-minute prices).
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: -1000
+                max_value: 10000
+      - name: energy_usd_mwh
+        description: Energy component, $/MWh.
+      - name: congestion_usd_mwh
+        description: Congestion component, $/MWh.
+      - name: loss_usd_mwh
+        description: Marginal loss component, $/MWh.
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+  # ── EIA-930 ─────────────────────────────────────────────────────────────────
+
+  - name: eia_region_data__base
+    description: >
+      Every EIA-930 hourly value for ISO New England (API 2019 on, bulk files
+      2015–2018), one row per hour × measure × ingest run, labelled by hour
+      start. No tests: they would scan all of bronze (see header).
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC); EIA's own label is the hour's end.
+      - name: measure
+        description: D demand, DF day-ahead demand forecast, NG net generation, TI total interchange.
+      - name: source
+        description: api or bulk, the bronze table the row is from.
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: eia_region_data__latest
+    description: >
+      The newest EIA value per hour × measure for ISO New England, 2015-07 on.
+      Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, measure]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+        data_tests: [not_null]
+      - name: measure
+        description: D demand, DF day-ahead demand forecast, NG net generation, TI total interchange.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [D, DF, NG, TI]
+      - name: measure_name
+        description: EIA's name for the measure.
+      - name: value_mwh
+        description: >
+          Value for the hour, MWh (average MW over the hour); null when EIA has
+          none. EIA's series has isolated one-hour glitches, kept as reported
+          (e.g. interchange −12,307 at 2021-03-01 04:00 UTC between hours near
+          −2,400); excluding them is for gold or a model to decide.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: -10000  # interchange is negative when New England imports
+                max_value: 40000
+              config:
+                severity: warn  # flags EIA's known glitches every run without blocking the build
+      - name: source
+        description: api (2019 on) or bulk (2015–2018).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [api, bulk]
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+  - name: eia_region_data__by_hour
+    description: >
+      One row per hour for ISO New England: demand, ISO-NE's day-ahead demand
+      forecast, net generation and interchange side by side. A view over
+      eia_region_data__latest.
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+      - name: demand_mwh
+        description: Demand, MWh.
+      - name: demand_forecast_mwh
+        description: ISO-NE's day-ahead demand forecast for the hour, MWh.
+      - name: net_generation_mwh
+        description: Net generation in New England, MWh.
+      - name: interchange_mwh
+        description: Total interchange, MWh; negative when New England imported.
+      - name: source
+        description: api or bulk.
+
+  - name: eia_fuel_type_data__base
+    description: >
+      Every EIA-930 hourly net generation value by fuel for ISO New England,
+      2019 on, one row per hour × fuel × ingest run, labelled by hour start. No
+      tests: they would scan all of bronze (see header).
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC); EIA's own label is the hour's end.
+      - name: fuel
+        description: EIA fuel code (COL, NG, NUC, OIL, WAT, PS, SUN, SNB, WND, BAT, OTH).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: eia_fuel_type_data__latest
+    description: >
+      The newest EIA value per hour × fuel for ISO New England, 2019 on.
+      Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, fuel]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+        data_tests: [not_null]
+      - name: fuel
+        description: EIA fuel code.
+        data_tests: [not_null]
+      - name: fuel_name
+        description: EIA's name for the fuel, e.g. Natural Gas.
+      - name: generation_mwh
+        description: Net generation from the fuel for the hour, MWh; storage can be negative while charging.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: -5000
+                max_value: 30000
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Unit tests — fixed input rows → expected output, for rules a data test can't
 # see in a day's real data. Run inside `dbt build` on inline rows (no bronze

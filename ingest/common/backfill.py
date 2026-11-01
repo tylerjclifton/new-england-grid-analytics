@@ -27,7 +27,7 @@ from common.run import fail
 BACKFILL_START = os.getenv('BACKFILL_START')
 BACKFILL_END   = os.getenv('BACKFILL_END')
 BATCH_DAYS     = 31
-PAUSE_SECONDS  = 0.25  # ISO-NE rate-limits (HTTP 429) sustained calls; fetch() retries them
+PAUSE_SECONDS  = 1.0  # ISO-NE blocks a caller making ~4 day-file calls a second (HTTP 429); decision 0013
 
 
 def is_backfill():

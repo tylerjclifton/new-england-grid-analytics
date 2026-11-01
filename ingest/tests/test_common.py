@@ -94,7 +94,7 @@ def test_fetch_exits_after_retrying_a_server_error(monkeypatch, no_sleep):
         fetch.fetch("https://example.test")
 
     assert exit_info.value.code == 1
-    assert no_sleep == [5, 10, 20, 40]  # a wait before each retry, doubling
+    assert no_sleep == [15, 30, 60, 120, 240]  # a wait before each retry, doubling
 
 
 def test_fetch_retries_a_rate_limit_then_succeeds(monkeypatch, no_sleep):

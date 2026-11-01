@@ -30,10 +30,11 @@ from common.run import fail
 SECRET_PARAMS = {'api_key'}
 
 # Retries for transient failures: statuses worth retrying, attempts in all, and
-# the first wait (doubling after each attempt: 5, 10, 20, 40 s)
+# the first wait, doubling after each attempt (15, 30, 60, 120, 240 s: ~8
+# minutes in all, enough to outlast ISO-NE's rate-limit block; decision 0013)
 RETRY_STATUSES  = {429, 500, 502, 503, 504}
-MAX_ATTEMPTS    = 5
-BACKOFF_SECONDS = 5
+MAX_ATTEMPTS    = 6
+BACKOFF_SECONDS = 15
 
 
 def fetch(url, params=None, headers=None, auth=None, timeout=60):

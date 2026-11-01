@@ -19,78 +19,79 @@ locals {
   # One entry per ingest job. Key = job folder under ingest/ = bronze table
   # name with "-" for "_" (e.g. openmeteo-forecast → bronze.openmeteo_forecast).
   #   schedule cron, or null for a backfill-only job (run by hand, decision 0013)
-  #   timeout  per scheduled run; a backfill execution sets its own
-  #            (--task-timeout, docs/runbook.md)
+  #   timeout  per scheduled run: 15 minutes, which covers fetch()'s ~8
+  #            minutes of retries if a source is rate-limiting or down; a
+  #            backfill execution sets its own (--task-timeout, docs/runbook.md)
   #   secrets  env var name → Secret Manager secret (secrets.tf) the job reads
   #   env      plain job-specific settings
   ingest_jobs = {
     "openmeteo-forecast" = {
       schedule = var.weather_forecast_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # One request covering every load zone
+      timeout  = "900s" # One request covering every load zone
       secrets  = {}
       env      = {}
     }
     "isone-fuel-mix" = {
       schedule = var.isone_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # One request per day (yesterday and today)
+      timeout  = "900s" # One request per day (yesterday and today)
       secrets  = local.isone_login
       env      = {}
     }
     "isone-system-load" = {
       schedule = var.isone_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # One request per day (yesterday and today)
+      timeout  = "900s" # One request per day (yesterday and today)
       secrets  = local.isone_login
       env      = {}
     }
     "isone-zonal-load" = {
       schedule = var.isone_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # One request per day (yesterday and today)
+      timeout  = "900s" # One request per day (yesterday and today)
       secrets  = local.isone_login
       env      = {}
     }
     "isone-rt-lmp" = {
       schedule = var.isone_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # 36 requests (2 versions × 2 days × 9 locations), ~10 s
+      timeout  = "900s" # 36 requests (2 versions × 2 days × 9 locations), ~10 s
       secrets  = local.isone_login
       env      = {}
     }
     "isone-da-lmp" = {
       schedule = var.isone_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # 18 requests (2 days × 9 locations)
+      timeout  = "900s" # 2 requests (all-locations files for today and tomorrow)
       secrets  = local.isone_login
       env      = {}
     }
     "isone-rt-lmp-hourly" = {
       schedule = null # Backfill only: hourly prices from before the five-minute history
       memory   = "512Mi"
-      timeout  = "300s"
+      timeout  = "900s"
       secrets  = local.isone_login
       env      = {}
     }
     "eia-region-data" = {
       schedule = var.eia_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # One page (two weeks × 4 measures)
+      timeout  = "900s" # One page (two weeks × 4 measures)
       secrets  = { EIA_API_KEY = "eia-api-key" }
       env      = {}
     }
     "eia-fuel-type-data" = {
       schedule = var.eia_ingestion_schedule
       memory   = "512Mi"
-      timeout  = "300s" # One page (two weeks × ~11 fuels)
+      timeout  = "900s" # One page (two weeks × ~11 fuels)
       secrets  = { EIA_API_KEY = "eia-api-key" }
       env      = {}
     }
     "eia-region-data-bulk" = {
       schedule = null  # Backfill only: 2015–2018, before the API's history
       memory   = "1Gi" # Each bulk file is ~45 MB of CSV
-      timeout  = "300s"
+      timeout  = "900s"
       secrets  = {} # The bulk files need no key
       env      = {}
     }

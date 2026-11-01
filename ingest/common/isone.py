@@ -13,8 +13,9 @@ changes (decision 0002).
 
 A job using it, once per batch of days (day_batches(): one batch normally,
 ~monthly batches in backfill mode, so memory stays flat):
-  1. Fetch  → fetch_days('<feed>', days, locations): every record for each
-              day and pricing location
+  1. Fetch  → fetch_days('<feed>', days, locations, keep): every record for
+              each day (and pricing location, for feeds served per location;
+              or kept by `keep`, for feeds served for every location at once)
   2. Shape  → to_frame(records, COLUMNS): one row per record, its time in UTC
               (price records first go through flatten_location())
   3. Write  → append_to_bronze(df)
@@ -102,10 +103,13 @@ def records(body):
     return content if isinstance(content, list) else [content]
 
 
-def fetch_days(feed, days, locations=(None,)):
+def fetch_days(feed, days, locations=(None,), keep=None):
     """
-    Every record `feed` has for each of `days`, oldest day first. A
-    per-location feed (prices) takes `locations`, one call each.
+    Every record `feed` has for each of `days`, oldest day first. A feed served
+    per location (five-minute prices) takes `locations`, one call each. For a
+    feed served for every location at once (hourly prices, ~1,200 locations a
+    day), `keep` filters each call's records as they arrive (e.g.
+    at_pricing_location), so only the kept ones are held in memory.
     """
     username = os.getenv('ISONE_WS_USERNAME')
     password = os.getenv('ISONE_WS_PASSWORD')
@@ -117,10 +121,17 @@ def fetch_days(feed, days, locations=(None,)):
         for location in locations:
             path = f"{feed}/day/{day}" + (f"/location/{location}" if location else '')
             path_records = records(fetch(f"{API_URL}/{path}.json", auth=(username, password)).json())
+            if keep:
+                path_records = [record for record in path_records if keep(record)]
             logging.info(f"{path}: {len(path_records)} records")
             all_records.extend(path_records)
             pause()
     return all_records
+
+
+def at_pricing_location(record):
+    """Whether a price record is at one of PRICING_LOCATIONS (for fetch_days' `keep`)."""
+    return int(record['Location']['@LocId']) in PRICING_LOCATIONS
 
 
 def flatten_location(record):
