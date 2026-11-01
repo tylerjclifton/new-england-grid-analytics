@@ -37,7 +37,9 @@ Feeds relevant to the roadmap (of ~440 endpoints):
 
 Hourly data for every US balancing authority; ISO-NE is `ISNE`. Explored 2026-10-29 with the January–June 2026 file.
 
-- **Access:** bulk six-month CSVs need no key: `https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_<year>_<Jan_Jun|Jul_Dec>.csv` (~30–47 MB each, all BAs), back to `2015_Jul_Dec`. The API (`api.eia.gov/v2/electricity/rto/...`) needs a free key.
+- **Access:** bulk six-month CSVs need no key: `https://www.eia.gov/electricity/gridmonitor/sixMonthFiles/EIA930_BALANCE_<year>_<Jan_Jun|Jul_Dec>.csv` (~30–47 MB each, all BAs), back to `2015_Jul_Dec`. The API (`api.eia.gov/v2/electricity/rto/{region-data,fuel-type-data}`) needs a free key (in Secret Manager since 2026-10-31) and for ISNE starts at **2019-01-01** ([0014](decisions/0014-eia-930.md)).
+- **API shape:** long records, one per hour × measure: `{"period": "2019-01-01T06", "respondent": "ISNE", "type": "D", "type-name": "Demand", "value": "11614", "value-units": "megawatthours"}` (fuel type data has `fueltype` instead of `type`). Values are strings; pages hold up to 5,000 records. `period` is the UTC hour **end**, matching the bulk files' "UTC Time at End of Hour", and the values match the bulk files' raw columns hour for hour.
+- **Bulk columns change over time:** 19 in 2015 (demand, forecast, net generation, interchange, no fuel breakdown), 44 in 2019, 65 in 2026. For ISNE, raw and "(Adjusted)" columns were identical in 2015 H2 and 2019 H1.
 - **Revisions:** every file, back to 2015, had a Last-Modified of 2026-10-28, so EIA regenerates them all daily and any hour can change.
 - **Time:** ISNE's UTC column had all 4,343 hours, no gaps or duplicates. The local-time column skips 2 AM on 2026-03-08 ([0002](decisions/0002-timestamps-in-utc.md)).
 - **Columns:** demand, ISO-NE's day-ahead demand forecast, net generation, interchange, and generation by fuel, each with "Imputed" and "Adjusted" variants. A fuel the region isn't burning is often **null, not 0** (coal null 54% of hours, oil 37%), so treat null as zero only deliberately.

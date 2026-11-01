@@ -4,7 +4,7 @@ A data engineering and modeling project on the New England electric grid: what i
 
 **Docs:** [setup on a new machine](docs/setup.md) · [runbook](docs/runbook.md) · [decision records](docs/decisions/README.md) · [roadmap](docs/roadmap.md) · [data source notes](docs/data-sources.md)
 
-**Status:** weather and ISO-NE generation by fuel, load (system and per zone), and prices (real-time and day-ahead) are ingesting; history backfills and the first gold table are next ([roadmap](docs/roadmap.md)).
+**Status:** weather, ISO-NE (generation by fuel, load, prices) and EIA-930 (demand, ISO-NE's demand forecast, generation by fuel) are ingesting; history backfills are under way, and the first gold table is next ([roadmap](docs/roadmap.md)).
 
 ---
 
@@ -18,6 +18,8 @@ A data engineering and modeling project on the New England electric grid: what i
 | ISO-NE web services | Five-minute load per load zone, with each zone's rooftop solar estimate | Every 6 hours | Every interval for yesterday and today |
 | ISO-NE web services | Five-minute real-time prices at the Hub and eight load zones (energy, congestion, losses) | Every 6 hours | Preliminary prices for yesterday and today; final prices for 2–3 days ago ([0012](docs/decisions/0012-isone-prices.md)) |
 | ISO-NE web services | Hourly day-ahead prices at the Hub and eight load zones | Every 6 hours | Today and tomorrow (tomorrow once the market clears, around midday) |
+| EIA-930 API | ISO New England hourly demand, ISO-NE's day-ahead demand forecast, net generation, interchange | Daily | The last 14 days (EIA revises recent hours; [0014](docs/decisions/0014-eia-930.md)) |
+| EIA-930 API | ISO New England hourly net generation by fuel | Daily | The last 14 days |
 
 The dbt transform runs every 6 hours, after the ingest runs.
 
@@ -28,7 +30,7 @@ The dbt transform runs every 6 hours, after the ingest runs.
 ```
 Open-Meteo  ──┐                         ┌─────────────────────────────────────────┐
 ISO-NE      ──┼──► Cloud Run Jobs ──►   │  BigQuery                               │
-(EIA)       ──┘         ↑               │  bronze → silver → gold                 │
+EIA         ──┘         ↑               │  bronze → silver → gold                 │
                  Cloud Scheduler        │            └─ dbt Core ─┘               │
                                         └─────────────────────────────────────────┘
 ```
@@ -54,6 +56,9 @@ Each layer is its own BigQuery dataset.
 | `isone_rt_lmp` | five-minute interval × location × version (prelim/final) × ingest run | ~9,900 rows per run, ~1.5 GB/year: the largest table ([0012](docs/decisions/0012-isone-prices.md)) |
 | `isone_da_lmp` | hour × location × ingest run | ~440 rows per run, ~65 MB/year |
 | `isone_rt_lmp_hourly` | hour × location × ingest run | Backfill only: hourly real-time prices for 2019–2024, before the five-minute history ([0013](docs/decisions/0013-isone-backfill.md)) |
+| `eia_region_data` | hour × measure × ingest run | ~1,300 rows per daily run (two weeks re-pulled), ~50 MB/year; history from 2019 ([0014](docs/decisions/0014-eia-930.md)) |
+| `eia_fuel_type_data` | hour × fuel × ingest run | ~3,700 rows per daily run, ~115 MB/year; history from 2019 |
+| `eia_region_data_bulk` | hour × measure × ingest run | Backfill only: 2015-07 to 2018-12 from EIA's bulk files, in the API's shape |
 
 | Silver model | Grain | What it produces |
 |---|---|---|
@@ -157,9 +162,11 @@ infra/                     Terraform: one file per resource family
   secrets.tf               Source credentials (values added by hand)
 ingest/                    One shared image for every ingest job
   common/run.py            What every run shares: job name, run timestamp, logging, failure reports
-  common/fetch.py          fetch(): HTTP GET that fails the job cleanly (step 1)
+  common/fetch.py          fetch(): HTTP GET that retries transient errors, redacts keys, and fails the job cleanly (step 1)
   common/load.py           append_to_bronze(): load into bronze (step 3)
-  common/isone.py          ISO-NE API: login, days and pricing locations to pull, backfill mode, response unwrapping
+  common/isone.py          ISO-NE API: login, days and pricing locations to pull, response unwrapping
+  common/eia.py            EIA API: key, hours to pull, paging, shaping
+  common/backfill.py       Backfill mode shared by every job that has one (day range, monthly batches)
   openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
   isone-fuel-mix/          ISO-NE generation by fuel (every 6 hours)
   isone-system-load/       ISO-NE five-minute system load (every 6 hours)
@@ -167,6 +174,9 @@ ingest/                    One shared image for every ingest job
   isone-rt-lmp/            ISO-NE five-minute real-time prices, prelim and final (every 6 hours)
   isone-da-lmp/            ISO-NE hourly day-ahead prices (every 6 hours)
   isone-rt-lmp-hourly/     ISO-NE hourly real-time prices, 2019–2024 (backfill only)
+  eia-region-data/         EIA-930 demand, demand forecast, generation, interchange (daily)
+  eia-fuel-type-data/      EIA-930 generation by fuel (daily)
+  eia-region-data-bulk/    EIA-930 2015–2018 from the bulk files (backfill only)
   tests/                   Job tests against canned API responses
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds

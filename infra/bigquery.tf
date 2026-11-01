@@ -43,6 +43,18 @@ locals {
     { name = "LossComponent", type = "FLOAT", description = "Marginal loss component, $/MWh" },
   ]
 
+  # The fields every EIA-930 region-data record has (the API's names, "-" as
+  # "_"); shared by the API table and the 2015–2018 bulk backfill table
+  eia_region_columns = [
+    { name = "period", type = "TIMESTAMP", description = "End of the hour the value is for (UTC; EIA labels hours by their end)" },
+    { name = "respondent", type = "STRING", description = "Balancing authority, ISNE (ISO New England)" },
+    { name = "respondent_name", type = "STRING", description = "Balancing authority name" },
+    { name = "type", type = "STRING", description = "Measure: D demand, DF day-ahead demand forecast, NG net generation, TI total interchange" },
+    { name = "type_name", type = "STRING", description = "Measure name, e.g. Demand" },
+    { name = "value", type = "FLOAT", description = "Value for the hour, MWh (MW averaged over the hour); null when EIA has none" },
+    { name = "value_units", type = "STRING", description = "Units, megawatthours" },
+  ]
+
   # One entry per bronze table. Column names follow the source system; renaming
   # to project conventions happens in silver.
   bronze_tables = {
@@ -116,6 +128,32 @@ locals {
       description = "ISO-NE hourly real-time prices (LMPs), final, at the Hub and the eight load zones: a backfill of the years before ISO-NE's five-minute history begins (decision 0013). Each hourly price is the mean of that hour's five-minute prices. Grain: hour × location × ingest run."
       clustering  = ["LocId", "BeginDate"]
       columns     = local.isone_lmp_columns
+    }
+
+    eia_region_data = {
+      description = "EIA-930 hourly demand, day-ahead demand forecast, net generation and interchange for ISO New England, from the API (decision 0014). Each daily run re-pulls two weeks, since EIA revises recent hours. History from 2019-01-01. Grain: hour × measure × ingest run."
+      clustering  = ["type", "period"]
+      columns     = local.eia_region_columns
+    }
+
+    eia_region_data_bulk = {
+      description = "EIA-930 hourly demand, day-ahead demand forecast, net generation and interchange for ISO New England, 2015-07 to 2018-12, from EIA's six-month bulk files, reshaped into the API's long form (decision 0014). Backfill only. Grain: hour × measure × ingest run."
+      clustering  = ["type", "period"]
+      columns     = local.eia_region_columns
+    }
+
+    eia_fuel_type_data = {
+      description = "EIA-930 hourly net generation by fuel for ISO New England, from the API (decision 0014). Each daily run re-pulls two weeks. History from 2019-01-01. A fuel not reported for an hour is null or absent. Grain: hour × fuel × ingest run."
+      clustering  = ["fueltype", "period"]
+      columns = [
+        { name = "period", type = "TIMESTAMP", description = "End of the hour the value is for (UTC; EIA labels hours by their end)" },
+        { name = "respondent", type = "STRING", description = "Balancing authority, ISNE (ISO New England)" },
+        { name = "respondent_name", type = "STRING", description = "Balancing authority name" },
+        { name = "fueltype", type = "STRING", description = "Fuel code: COL, NG, NUC, OIL, WAT, PS, SUN, SNB, WND, BAT, OTH" },
+        { name = "type_name", type = "STRING", description = "Fuel name, e.g. Natural Gas" },
+        { name = "value", type = "FLOAT", description = "Net generation for the hour, MWh; null when EIA has none" },
+        { name = "value_units", type = "STRING", description = "Units, megawatthours" },
+      ]
     }
 
     isone_da_lmp = {

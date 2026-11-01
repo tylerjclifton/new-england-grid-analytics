@@ -59,6 +59,12 @@ variable "isone_ingestion_schedule" {
   default     = "10 */6 * * *"
 }
 
+variable "eia_ingestion_schedule" {
+  description = "Cron for the EIA ingest jobs (region data, fuel type data). Daily at 05:15, before the 06:20 transform; each run re-pulls two weeks, since EIA revises recent hours (decision 0014)."
+  type        = string
+  default     = "15 5 * * *"
+}
+
 variable "transform_schedule" {
   description = "Cron for the dbt transform job. Every 6 hours at :20, just after the weather and ISO-NE runs."
   type        = string

@@ -368,3 +368,126 @@ def test_rt_lmp_hourly_backfill(run_job, isone_login, backfill):
     assert all('/hourlylmp/rt/final/day/20200101/location/' in request['url'] for request in run_job.requests)
     assert len(df) == len(PRICING_LOCATIONS)
     assert df['BeginDate'].iloc[0] == pd.Timestamp('2020-01-01T05:00', tz='UTC')
+
+
+# ── EIA (common/eia.py, eia-region-data, eia-fuel-type-data, eia-region-data-bulk) ──
+
+@pytest.fixture
+def eia_key(monkeypatch):
+    """The EIA key, as Secret Manager provides it to the jobs."""
+    monkeypatch.setenv('EIA_API_KEY', 'test-key')
+
+
+def eia_page(records, total=None):
+    """One page of an EIA API response."""
+    return {'response': {'total': str(total if total is not None else len(records)), 'data': records}}
+
+
+def eia_region_record(period, type_code='D', value='11614'):
+    return {'period': period, 'respondent': 'ISNE', 'respondent-name': 'ISO New England', 'type': type_code,
+            'type-name': 'Demand', 'value': value, 'value-units': 'megawatthours'}
+
+
+def test_eia_normal_run_is_the_last_two_weeks():
+    import datetime
+
+    from common.eia import hour_ranges
+
+    assert hour_ranges(now=datetime.datetime(2026, 11, 1, 5, tzinfo=datetime.timezone.utc)) == [('2026-10-18T00', None)]
+
+
+def test_eia_backfill_ranges_are_months_of_whole_utc_days(backfill):
+    from common.eia import hour_ranges
+
+    backfill('20190101', '20190215')
+    assert hour_ranges() == [('2019-01-01T00', '2019-01-31T23'), ('2019-02-01T00', '2019-02-15T23')]
+
+
+def test_eia_region_data_shapes_and_requests(run_job, eia_key):
+    df = run_job('eia-region-data', [eia_page([eia_region_record('2019-01-01T06'),
+                                               eia_region_record('2019-01-01T06', 'DF', '11500')])])
+
+    params = run_job.requests[0]['params']
+    assert run_job.requests[0]['url'].endswith('/electricity/rto/region-data/data/')
+    assert params['facets[respondent][]'] == 'ISNE' and params['frequency'] == 'hourly'
+    assert list(df.columns) == ['period', 'respondent', 'respondent_name', 'type', 'type_name', 'value', 'value_units']
+    assert df['period'].iloc[0] == pd.Timestamp('2019-01-01T06', tz='UTC')
+    assert df['value'].dtype == 'float64' and df['value'].tolist() == [11614.0, 11500.0]
+
+
+def test_eia_pages_until_the_total(run_job, eia_key, monkeypatch):
+    import common.eia as eia
+
+    monkeypatch.setattr(eia, 'PAGE_SIZE', 2)
+    pages = [eia_page([eia_region_record('2019-01-01T00'), eia_region_record('2019-01-01T01')], total=3),
+             eia_page([eia_region_record('2019-01-01T02')], total=3)]
+    df = run_job('eia-region-data', pages)
+
+    assert [request['params']['offset'] for request in run_job.requests] == [0, 2]
+    assert len(df) == 3
+
+
+def test_eia_null_value_is_null(run_job, eia_key):
+    df = run_job('eia-region-data', [eia_page([eia_region_record('2019-01-01T06', value=None)])])
+
+    assert df['value'].isna().all()
+
+
+def test_eia_error_body_fails_without_the_key(run_job, eia_key, capsys):
+    with pytest.raises(SystemExit):
+        run_job('eia-region-data', [{'error': 'Invalid key test-key'}])
+
+    output = capsys.readouterr().out
+    assert 'test-key' not in output and 'returned no data' in output
+
+
+def test_eia_without_key_fails_before_fetching(run_job, monkeypatch):
+    monkeypatch.delenv('EIA_API_KEY', raising=False)
+
+    with pytest.raises(SystemExit):
+        run_job('eia-region-data', [])
+    assert run_job.requests == []
+
+
+def test_eia_fuel_type_data(run_job, eia_key):
+    record = {'period': '2019-01-01T06', 'respondent': 'ISNE', 'respondent-name': 'ISO New England',
+              'fueltype': 'NUC', 'type-name': 'Nuclear', 'value': '4013', 'value-units': 'megawatthours'}
+    df = run_job('eia-fuel-type-data', [eia_page([record])])
+
+    assert run_job.requests[0]['url'].endswith('/electricity/rto/fuel-type-data/data/')
+    assert df.loc[0, 'fueltype'] == 'NUC' and df.loc[0, 'value'] == 4013.0
+
+
+BULK_HEADER = ('"Balancing Authority","Data Date","Hour Number","Local Time at End of Hour",'
+               '"UTC Time at End of Hour","Demand Forecast (MW)","Demand (MW)","Net Generation (MW)",'
+               '"Total Interchange (MW)"\n')
+
+
+def test_eia_bulk_keeps_isne_in_range_as_long_rows(run_job, backfill):
+    backfill('20150701', '20150701')
+    csv = BULK_HEADER + (
+        'ISNE,07/01/2015,1,07/01/2015 1:00:00 AM,07/01/2015 5:00:00 AM,11810,12583,11322,-1261\n'
+        'ISNE,07/01/2015,20,07/01/2015 8:00:00 PM,07/02/2015 12:00:00 AM,15000,"15,100",13000,-2100\n'  # next UTC day
+        'CISO,07/01/2015,1,07/01/2015 1:00:00 AM,07/01/2015 8:00:00 AM,1,2,3,4\n'
+    )
+    df = run_job('eia-region-data-bulk', [csv])
+
+    assert run_job.requests[0]['url'].endswith('EIA930_BALANCE_2015_Jul_Dec.csv')
+    assert len(df) == 4  # one ISNE hour in range × 4 measures
+    assert set(df['type']) == {'D', 'DF', 'NG', 'TI'}
+    assert df.set_index('type').loc['D', 'value'] == 12583.0
+    assert df['period'].unique().tolist() == [pd.Timestamp('2015-07-01T05', tz='UTC')]
+    assert list(df.columns) == ['period', 'respondent', 'respondent_name', 'type', 'type_name', 'value', 'value_units']
+
+
+def test_eia_bulk_fetches_each_half_year_once(run_job, backfill):
+    backfill('20150601', '20160105')
+    run_job('eia-region-data-bulk', [BULK_HEADER] * 3)
+
+    assert [request['url'].rsplit('/', 1)[-1] for request in run_job.requests] == [
+        'EIA930_BALANCE_2015_Jan_Jun.csv', 'EIA930_BALANCE_2015_Jul_Dec.csv', 'EIA930_BALANCE_2016_Jan_Jun.csv']
+
+
+def test_eia_bulk_refuses_to_run_on_a_schedule(run_job):
+    with pytest.raises(SystemExit):
+        run_job('eia-region-data-bulk', [])

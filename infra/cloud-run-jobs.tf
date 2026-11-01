@@ -73,6 +73,27 @@ locals {
       secrets  = local.isone_login
       env      = {}
     }
+    "eia-region-data" = {
+      schedule = var.eia_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # One page (two weeks × 4 measures)
+      secrets  = { EIA_API_KEY = "eia-api-key" }
+      env      = {}
+    }
+    "eia-fuel-type-data" = {
+      schedule = var.eia_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "300s" # One page (two weeks × ~11 fuels)
+      secrets  = { EIA_API_KEY = "eia-api-key" }
+      env      = {}
+    }
+    "eia-region-data-bulk" = {
+      schedule = null  # Backfill only: 2015–2018, before the API's history
+      memory   = "1Gi" # Each bulk file is ~45 MB of CSV
+      timeout  = "300s"
+      secrets  = {} # The bulk files need no key
+      env      = {}
+    }
   }
 
   # The jobs Cloud Scheduler triggers (cloud-scheduler.tf, iam.tf)

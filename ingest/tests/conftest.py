@@ -32,6 +32,10 @@ class FakeResponse:
     def text(self):
         return self._body if isinstance(self._body, str) else json.dumps(self._body)
 
+    @property
+    def content(self):
+        return self.text.encode()
+
 
 @pytest.fixture
 def run_job(monkeypatch):
