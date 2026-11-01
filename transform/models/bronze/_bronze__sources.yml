@@ -54,3 +54,37 @@ sources:
             # Every 6 hours; the slack covers one failed run
             warn_after: {count: 7, period: hour}
             error_after: {count: 13, period: hour}
+
+      - name: isone_zonal_load
+        description: >
+          ISO-NE five-minute estimated load per load zone, with each zone's
+          rooftop solar estimate. Each run re-pulls yesterday and today
+          (decision 0010). Grain: five-minute interval × load zone × ingest run.
+        config:
+          freshness:
+            # Every 6 hours; the slack covers one failed run
+            warn_after: {count: 7, period: hour}
+            error_after: {count: 13, period: hour}
+
+      - name: isone_rt_lmp
+        description: >
+          ISO-NE five-minute real-time prices at the Hub and eight load zones:
+          preliminary for yesterday and today, final for 2–3 days ago, labelled
+          by LmpType (decision 0012). Grain: five-minute interval × location ×
+          version × ingest run.
+        config:
+          freshness:
+            # Every 6 hours; the slack covers one failed run
+            warn_after: {count: 7, period: hour}
+            error_after: {count: 13, period: hour}
+
+      - name: isone_da_lmp
+        description: >
+          ISO-NE hourly day-ahead prices at the Hub and eight load zones, today
+          and tomorrow each run (decision 0012). Grain: hour × location × ingest
+          run.
+        config:
+          freshness:
+            # Every 6 hours; the slack covers one failed run
+            warn_after: {count: 7, period: hour}
+            error_after: {count: 13, period: hour}

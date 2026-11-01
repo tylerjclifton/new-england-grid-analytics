@@ -11,6 +11,7 @@ config-version: 2
 profile: 'new_england_grid_analytics'
 
 model-paths: ["models"]
+seed-paths: ["seeds"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
 clean-targets: ["target", "dbt_packages"]
@@ -31,3 +32,9 @@ models:
     gold:
       +schema: gold
       +materialized: table
+
+# Seeds — small reference tables kept in the repo (seeds/_seeds.yml), loaded
+# into silver by `dbt build` alongside the models that join them
+seeds:
+  new_england_grid_analytics:
+    +schema: silver

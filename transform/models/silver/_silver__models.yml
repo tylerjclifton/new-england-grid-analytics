@@ -202,3 +202,203 @@ models:
       - name: ingested_at
         description: The ingest run this version came from (UTC).
         data_tests: [not_null]
+
+  # ── ISO-NE: zonal load ──────────────────────────────────────────────────────
+
+  - name: isone_zonal_load__base
+    description: >
+      Every ISO-NE zonal load interval, one row per interval × load zone ×
+      ingest run, with the zone's rooftop solar estimate. No tests: they would
+      scan all of bronze (see header).
+    columns:
+      - name: interval_start_at
+        description: Start of the five-minute interval (UTC).
+      - name: load_zone
+        description: ISO-NE load zone (ME, NH, VT, CT, RI, SEMA, WCMA, NEMA), as the weather uses.
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: isone_zonal_load__latest
+    description: >
+      The newest version of each zone's load in each five-minute interval,
+      estimated and with rooftop solar added back. Incremental table (see model
+      header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [interval_start_at, load_zone]
+    columns:
+      - name: interval_start_at
+        description: Start of the five-minute interval (UTC).
+        data_tests: [not_null]
+      - name: load_zone
+        description: ISO-NE load zone, as the weather uses.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: load_zone_id
+        description: ISO-NE location ID of the zone (4001–4008).
+      - name: load_mw
+        description: Estimated load in the zone, MW (the zones add up to system native load).
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 15000
+      - name: btm_solar_mw
+        description: Estimated behind-the-meter (rooftop) solar in the zone, MW; 0 after dark.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 5000
+      - name: load_with_btm_solar_mw
+        description: load_mw plus btm_solar_mw, MW; the demand weather drives.
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+  # ── ISO-NE: prices ──────────────────────────────────────────────────────────
+
+  - name: isone_rt_lmp__base
+    description: >
+      Every ISO-NE real-time price at the Hub and eight load zones, one row per
+      interval × location × version × ingest run. No tests: they would scan all
+      of bronze (see header).
+    columns:
+      - name: interval_start_at
+        description: Start of the five-minute interval (UTC).
+      - name: location_code
+        description: HUB, or the load zone (ME … NEMA).
+      - name: is_final
+        description: Whether this is ISO-NE's final price (else preliminary).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: isone_rt_lmp__latest
+    description: >
+      The best real-time price per five-minute interval × location: final once
+      published, preliminary until then. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [interval_start_at, location_code]
+    columns:
+      - name: interval_start_at
+        description: Start of the five-minute interval (UTC).
+        data_tests: [not_null]
+      - name: location_code
+        description: HUB, or the load zone (ME … NEMA).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: location_id
+        description: ISO-NE location ID (4000 the Hub, 4001–4008 the load zones).
+      - name: lmp_usd_mwh
+        description: Real-time locational marginal price, $/MWh (energy + congestion + losses).
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: -1000  # prices go negative when there's more power than load can use
+                max_value: 10000  # scarcity pricing can reach thousands for minutes
+      - name: energy_usd_mwh
+        description: Energy component, $/MWh; the same at every location.
+      - name: congestion_usd_mwh
+        description: Congestion component, $/MWh; nonzero when transmission limits bind.
+      - name: loss_usd_mwh
+        description: Marginal loss component, $/MWh.
+      - name: is_final
+        description: Whether this is ISO-NE's final price (else preliminary, until the final arrives).
+        data_tests: [not_null]
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+  - name: isone_da_lmp__base
+    description: >
+      Every ISO-NE day-ahead price at the Hub and eight load zones, one row per
+      hour × location × ingest run. No tests: they would scan all of bronze (see
+      header).
+    columns:
+      - name: hour_start_at
+        description: Start of the hour the price is for (UTC).
+      - name: location_code
+        description: HUB, or the load zone (ME … NEMA).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: isone_da_lmp__latest
+    description: >
+      The day-ahead price per hour × location: the market's expectation of the
+      real-time price, set the day before. Incremental table (see model
+      header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, location_code]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour the price is for (UTC).
+        data_tests: [not_null]
+      - name: location_code
+        description: HUB, or the load zone (ME … NEMA).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+      - name: location_id
+        description: ISO-NE location ID (4000 the Hub, 4001–4008 the load zones).
+      - name: lmp_usd_mwh
+        description: Day-ahead locational marginal price, $/MWh (energy + congestion + losses).
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: -1000
+                max_value: 10000
+      - name: energy_usd_mwh
+        description: Energy component, $/MWh; the same at every location.
+      - name: congestion_usd_mwh
+        description: Congestion component, $/MWh.
+      - name: loss_usd_mwh
+        description: Marginal loss component, $/MWh.
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Unit tests — fixed input rows → expected output, for rules a data test can't
+# see in a day's real data. Run inside `dbt build` on inline rows (no bronze
+# scan). Incremental models are tested as a first build (is_incremental false).
+# ══════════════════════════════════════════════════════════════════════════════
+
+unit_tests:
+  - name: isone_rt_lmp__latest_prefers_final_over_newer_prelim
+    description: >
+      A final price wins over a preliminary one for the same interval, even when
+      the preliminary one was ingested later (decision 0012); with only
+      preliminary versions, the newest wins.
+    model: isone_rt_lmp__latest
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref('isone_rt_lmp__base')
+        rows:
+          # Hub 12:00: final, then a later preliminary copy → final kept
+          - {interval_start_at: "2026-10-30 16:00:00", location_code: HUB, location_id: 4000, lmp_usd_mwh: 31.0, is_final: true,  ingested_at: "2026-11-01 00:10:00"}
+          - {interval_start_at: "2026-10-30 16:00:00", location_code: HUB, location_id: 4000, lmp_usd_mwh: 30.0, is_final: false, ingested_at: "2026-11-01 06:10:00"}
+          # Maine 12:00: two preliminary versions → newest kept
+          - {interval_start_at: "2026-10-30 16:00:00", location_code: ME,  location_id: 4001, lmp_usd_mwh: 28.0, is_final: false, ingested_at: "2026-10-31 18:10:00"}
+          - {interval_start_at: "2026-10-30 16:00:00", location_code: ME,  location_id: 4001, lmp_usd_mwh: 29.0, is_final: false, ingested_at: "2026-11-01 00:10:00"}
+    expect:
+      rows:
+        - {interval_start_at: "2026-10-30 16:00:00", location_code: HUB, lmp_usd_mwh: 31.0, is_final: true}
+        - {interval_start_at: "2026-10-30 16:00:00", location_code: ME,  lmp_usd_mwh: 29.0, is_final: false}

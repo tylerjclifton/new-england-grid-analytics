@@ -1,0 +1,10 @@
+location_id,location_code,iso_location_name,description
+4000,HUB,.H.INTERNAL_HUB,"The Hub: New England's benchmark price, an average of nodes in central Massachusetts"
+4001,ME,.Z.MAINE,Maine
+4002,NH,.Z.NEWHAMPSHIRE,New Hampshire
+4003,VT,.Z.VERMONT,Vermont
+4004,CT,.Z.CONNECTICUT,Connecticut
+4005,RI,.Z.RHODEISLAND,Rhode Island
+4006,SEMA,.Z.SEMASS,Southeastern Massachusetts
+4007,WCMA,.Z.WCMASS,Western and Central Massachusetts
+4008,NEMA,.Z.NEMASSBOST,Northeastern Massachusetts and Boston

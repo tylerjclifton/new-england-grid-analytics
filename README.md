@@ -62,12 +62,19 @@ Each layer is its own BigQuery dataset.
 | `isone_fuel_mix__latest` | snapshot × fuel | The newest version of each snapshot: MW per fuel and which fuel was marginal. Incremental table |
 | `isone_system_load__base` | five-minute interval × ingest run | Every load interval, with ISO-NE's rooftop solar estimate as `btm_solar_mw`. A view |
 | `isone_system_load__latest` | five-minute interval | The newest version of each interval: measured load and load with rooftop solar added back. Incremental table |
+| `isone_zonal_load__base` | five-minute interval × load zone × ingest run | Every zonal load interval, with the zone as its code (ME … NEMA) and its rooftop solar. A view |
+| `isone_zonal_load__latest` | five-minute interval × load zone | The newest version of each zone's load, with and without rooftop solar. Incremental table |
+| `isone_rt_lmp__base` | five-minute interval × location × version × ingest run | Every real-time price (Hub and zones), with `is_final`. A view |
+| `isone_rt_lmp__latest` | five-minute interval × location | The best real-time price: final once published, preliminary until then. Incremental table |
+| `isone_da_lmp__base` | hour × location × ingest run | Every day-ahead price (Hub and zones). A view |
+| `isone_da_lmp__latest` | hour × location | The day-ahead price per hour and location. Incremental table |
+| `isone_pricing_locations` (seed) | location | ISO-NE location ID → project code (HUB, ME … NEMA), kept in `transform/seeds/` |
 
 **Forecast vs. best estimate.** Explaining what happened uses `__latest`. A model that predicts ahead must use what was known at the time, from `__base` at the right `lead_hours`, or it trains on information it won't have when it runs ([0009](docs/decisions/0009-weather-per-load-zone.md)).
 
 ### Data quality
 
-Tests run inside `dbt build`, before gold is rebuilt; a failing test skips everything downstream. They sit on tables, not on views over all of bronze, so a test never rescans all history ([0003](docs/decisions/0003-cost-guardrails.md)). Then `dbt source freshness` fails the run if an ingest job has stopped writing (thresholds per source in `transform/models/bronze/_bronze__sources.yml`).
+Tests run inside `dbt build`, before gold is rebuilt; a failing test skips everything downstream. They sit on tables, not on views over all of bronze, so a test never rescans all history ([0003](docs/decisions/0003-cost-guardrails.md)). Unit tests (inline rows → expected rows, `unit_tests:` in the model yml) pin rules a day's real data may not exercise, such as a final price beating a newer preliminary one. Then `dbt source freshness` fails the run if an ingest job has stopped writing (thresholds per source in `transform/models/bronze/_bronze__sources.yml`).
 
 ### Alerting
 
@@ -83,6 +90,7 @@ Every Cloud Run job logs one structured failure report when it fails (`ingest/co
 | Bronze tables | `<source>_<entity>` | `openmeteo_forecast` |
 | Silver models | `<bronze table>__<step>`; `__base` is the cleaned copy | `openmeteo_forecast__base`, `openmeteo_forecast__latest` |
 | Gold tables | `<domain>_<entity>` | |
+| Seeds | `<source>_<entity>`, small reference data in `transform/seeds/`, loaded into silver | `isone_pricing_locations` |
 | Ingest jobs | `ingest/<source>-<entity>/main.py` → `bronze.<source>_<entity>` | `ingest/openmeteo-forecast` → `bronze.openmeteo_forecast` |
 | Bronze columns | Source system's names and units, plus audit columns | `temperature_2m`, `GenMw`, `SystemLoadBtmPv` |
 | Silver / gold columns | `snake_case`; `_at` = TIMESTAMP (UTC, [0002](docs/decisions/0002-timestamps-in-utc.md)); `_date` = DATE (Eastern); measures carry their unit; booleans `is_` | `hour_at`, `temperature_f`, `wind_speed_100m_ms` |
@@ -161,7 +169,8 @@ ingest/                    One shared image for every ingest job
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds
   models/silver/           <bronze table>__<step> models
-  macros/                  keep_latest_version, last_processed_run, dataset naming
+  seeds/                   Reference data (ISO-NE location IDs → load zone codes)
+  macros/                  keep_latest_version (optionally preferring final versions), last_processed_run, dataset naming
   run.py                   Transform entrypoint: dbt build, source freshness, failure report
 scripts/build-image.sh     Build and push a component image
 ```

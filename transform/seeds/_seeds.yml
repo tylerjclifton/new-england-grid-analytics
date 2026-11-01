@@ -1,0 +1,27 @@
+version: 2
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Seeds — reference data kept in the repo, loaded into silver by `dbt build`
+# ══════════════════════════════════════════════════════════════════════════════
+
+seeds:
+  - name: isone_pricing_locations
+    description: >
+      The ISO-NE locations this project tracks (decision 0012): the Hub and the
+      eight load zones, by ISO-NE location ID. Maps the IDs in the price and
+      zonal load feeds to the load zone codes the weather uses (ME … NEMA,
+      decision 0009). Grain: one row per location.
+    config:
+      column_types:
+        location_id: INT64
+    columns:
+      - name: location_id
+        description: ISO-NE location ID (LocId in the price feeds, load_zone_id in zonal load).
+        data_tests: [unique, not_null]
+      - name: location_code
+        description: Project code; HUB, or the load zone (ME, NH, VT, CT, RI, SEMA, WCMA, NEMA).
+        data_tests: [unique, not_null]
+      - name: iso_location_name
+        description: ISO-NE's name for the location.
+      - name: description
+        description: Plain-language name.
