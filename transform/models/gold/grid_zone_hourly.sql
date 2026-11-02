@@ -52,6 +52,9 @@ SELECT
     hours.hour_start_at,
     hours.load_zone,
     {{ eastern_calendar_columns('hours.hour_start_at') }},
+    holidays.holiday_name,
+    COALESCE(holidays.is_nerc_holiday, FALSE)      AS is_nerc_holiday,
+    COALESCE(holidays.is_federal_holiday, FALSE)   AS is_federal_holiday,
 
     -- Weather at the zone's point (reanalysis, from 2015-07): conditions at
     -- the hour's start, and totals over the hour (from the next label)
@@ -89,3 +92,5 @@ LEFT JOIN {{ ref('isone_rt_lmp__hourly') }} AS hub_rt
     ON hours.hour_start_at = hub_rt.hour_start_at AND hub_rt.location_code = 'HUB'
 LEFT JOIN {{ ref('isone_da_lmp__latest') }} AS da
     ON hours.hour_start_at = da.hour_start_at AND hours.load_zone = da.location_code
+LEFT JOIN {{ ref('us_holidays') }} AS holidays
+    ON DATE(hours.hour_start_at, 'America/New_York') = holidays.holiday_date

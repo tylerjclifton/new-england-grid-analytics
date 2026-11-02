@@ -21,4 +21,6 @@ Silver has each source cleaned on its own terms: five-minute load and prices, ir
 - **Size and cost:** ~100,000 and ~800,000 rows; a rebuild reads ~190 MB of silver, so ~23 GB a month at four runs a day, within BigQuery's free monthly terabyte. Make them incremental if that grows past a few dollars a month.
 - **Coverage differs by column**, and the table descriptions say from when. A model choosing its training window picks the columns it needs first.
 - **A snapshot mean isn't a time-weighted average:** fuel mix snapshots are moments at irregular times, so the hourly MW is close to the hour's energy, not exact.
-- **Next in gold:** holidays (for load models), and the forecast-as-issued weather beside the actual, once a model needs them.
+- **Next in gold:** the forecast-as-issued weather beside the actual, once a model needs it.
+
+**2026-11-02 — holidays added.** Both tables carry `holiday_name`, `is_nerc_holiday` and `is_federal_holiday`, joined on the Eastern date from a seed (`transform/seeds/us_holidays.csv`, 2015–2035, generated from rules by `scripts/generate-holidays.py`). Two flags, because they behave differently: across 2015–2026, demand on NERC's six holidays averaged 13,022 MW, 5.8% under ordinary weekdays (13,828) and close to a Saturday (12,783), while the other federal holidays averaged 13,730, barely different from a weekday. A load model should treat them apart.

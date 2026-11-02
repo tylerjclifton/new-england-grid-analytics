@@ -56,6 +56,9 @@ WITH
 SELECT
     hours.hour_start_at,
     {{ eastern_calendar_columns('hours.hour_start_at') }},
+    holidays.holiday_name,
+    COALESCE(holidays.is_nerc_holiday, FALSE)      AS is_nerc_holiday,
+    COALESCE(holidays.is_federal_holiday, FALSE)   AS is_federal_holiday,
 
     -- Demand (EIA-930, from 2015-07): actual and ISO-NE's own day-ahead forecast
     eia.demand_mwh                          AS eia_demand_mwh,
@@ -94,3 +97,5 @@ LEFT JOIN {{ ref('eia_region_data__by_hour') }} AS eia ON hours.hour_start_at = 
 LEFT JOIN {{ ref('isone_system_load__hourly') }} AS system_load ON hours.hour_start_at = system_load.hour_start_at
 LEFT JOIN {{ ref('isone_fuel_mix__hourly') }} AS fuel_mix ON hours.hour_start_at = fuel_mix.hour_start_at
 LEFT JOIN hub_prices ON hours.hour_start_at = hub_prices.hour_start_at
+LEFT JOIN {{ ref('us_holidays') }} AS holidays
+    ON DATE(hours.hour_start_at, 'America/New_York') = holidays.holiday_date

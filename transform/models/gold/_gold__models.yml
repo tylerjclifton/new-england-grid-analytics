@@ -37,6 +37,14 @@ models:
         description: Eastern weekday, 1 = Sunday … 7 = Saturday.
       - name: is_weekend
         description: Saturday or Sunday, Eastern.
+      - name: holiday_name
+        description: The US holiday on the Eastern date, if any (us_holidays seed).
+      - name: is_nerc_holiday
+        description: One of NERC's six off-peak holidays, when demand runs like a Sunday.
+        data_tests: [not_null]
+      - name: is_federal_holiday
+        description: A federal holiday as observed.
+        data_tests: [not_null]
       - name: eia_demand_mwh
         description: Demand for the hour, MWh (EIA-930).
       - name: eia_demand_forecast_mwh
@@ -94,6 +102,14 @@ models:
         description: Eastern weekday, 1 = Sunday … 7 = Saturday.
       - name: is_weekend
         description: Saturday or Sunday, Eastern.
+      - name: holiday_name
+        description: The US holiday on the Eastern date, if any (us_holidays seed).
+      - name: is_nerc_holiday
+        description: One of NERC's six off-peak holidays, when demand runs like a Sunday.
+        data_tests: [not_null]
+      - name: is_federal_holiday
+        description: A federal holiday as observed.
+        data_tests: [not_null]
       - name: temperature_f
         description: Air temperature at the zone's point at the hour's start, °F (reanalysis).
       - name: dew_point_f
