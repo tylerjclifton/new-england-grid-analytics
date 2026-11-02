@@ -81,6 +81,27 @@ locals {
       secrets  = local.isone_login
       env      = {}
     }
+    "isone-load-forecast" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "900s" # 2 requests (yesterday and tomorrow, every version)
+      secrets  = local.isone_login
+      env      = {}
+    }
+    "isone-zonal-load-forecast" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "900s" # 2 requests (yesterday and tomorrow, every version)
+      secrets  = local.isone_login
+      env      = {}
+    }
+    "isone-wind-forecast" = {
+      schedule = var.isone_ingestion_schedule
+      memory   = "512Mi"
+      timeout  = "900s" # 2 requests (yesterday's and today's publications)
+      secrets  = local.isone_login
+      env      = {}
+    }
     "isone-rt-lmp-hourly" = {
       schedule = null # Backfill only: hourly prices from before the five-minute history
       memory   = "512Mi"

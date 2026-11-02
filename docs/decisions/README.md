@@ -20,6 +20,7 @@ One short file per decision that shaped this project: the situation, what was de
 | [0014](0014-eia-930.md) | EIA-930: the API daily from 2019, the bulk files once for 2015–2018 | Accepted |
 | [0015](0015-weather-history.md) | Weather history: reanalysis from 2015 for what happened, past forecasts from 2021 for what was known | Accepted |
 | [0016](0016-first-gold-tables.md) | First gold tables: hourly spines with every source joined, system-wide and by load zone | Accepted |
+| [0017](0017-isone-forecasts.md) | ISO-NE's own forecasts: every version of the load forecasts, and the daily wind forecast, as the benchmark | Accepted |
 
 **Adding one:** copy the shape of an existing file, take the next number, add a row here.
 

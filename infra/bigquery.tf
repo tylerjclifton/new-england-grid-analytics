@@ -134,6 +134,41 @@ locals {
       ]
     }
 
+    isone_load_forecast = {
+      description = "ISO-NE's hourly system load forecast, every version it issued (decision 0017): about 10 per hour, from two days before through the day itself. Each run re-pulls yesterday and tomorrow. Grain: hour × version (CreationDate) × ingest run."
+      clustering  = ["BeginDate"]
+      columns = [
+        { name = "BeginDate", type = "TIMESTAMP", description = "Start of the hour forecast (UTC; ISO-NE sends Eastern time with its offset)" },
+        { name = "CreationDate", type = "TIMESTAMP", description = "When ISO-NE issued this version of the forecast (UTC)" },
+        { name = "LoadMw", type = "FLOAT", description = "Forecast system load, MW" },
+        { name = "NetLoadMw", type = "FLOAT", description = "Forecast load net of ISO-NE's adjustments, MW (equal to LoadMw in the hours checked)" },
+      ]
+    }
+
+    isone_zonal_load_forecast = {
+      description = "ISO-NE's hourly load forecast per load zone (its reliability regions), every version issued (decision 0017). Each run re-pulls yesterday and tomorrow. Grain: hour × zone × version (CreationDate) × ingest run."
+      clustering  = ["ReliabilityRegion", "BeginDate"]
+      columns = [
+        { name = "BeginDate", type = "TIMESTAMP", description = "Start of the hour forecast (UTC)" },
+        { name = "CreationDate", type = "TIMESTAMP", description = "When ISO-NE issued this version (UTC)" },
+        { name = "ReliabilityRegion", type = "STRING", description = "Load zone, under ISO-NE's location name (e.g. .Z.CONNECTICUT)" },
+        { name = "LoadMw", type = "FLOAT", description = "Forecast load in the zone, MW" },
+        { name = "ReliabilityRegionLoadPercentage", type = "FLOAT", description = "The zone's share of the system forecast, %" },
+      ]
+    }
+
+    isone_wind_forecast = {
+      description = "ISO-NE's seven-day wind power forecast, one published each day (decision 0017), system-wide. Each run re-pulls the publications of yesterday and today. Grain: publication (CreationDate) × hour × ingest run."
+      clustering  = ["BeginDate"]
+      columns = [
+        { name = "CreationDate", type = "TIMESTAMP", description = "When ISO-NE published the forecast (UTC)" },
+        { name = "MarketDate", type = "DATE", description = "Eastern day of the hour, as ISO-NE labels it" },
+        { name = "HourEnding", type = "STRING", description = "Hour as ISO-NE labels it: hour ending 01–24 Eastern; 02X is the repeated hour when clocks fall back" },
+        { name = "BeginDate", type = "TIMESTAMP", description = "Start of the hour (UTC), derived by the ingest from MarketDate and HourEnding (ingest/common/isone.py, hour_starts)" },
+        { name = "WindPowerForecast", type = "FLOAT", description = "Forecast wind generation, MW" },
+      ]
+    }
+
     isone_rt_lmp = {
       description = "ISO-NE five-minute real-time prices (LMPs) at the Hub and the eight load zones (decision 0012). Preliminary prices for yesterday and today, final prices for 2 and 3 days ago; LmpType says which. Grain: five-minute interval × location × version × ingest run."
       clustering  = ["LocId", "BeginDate"]

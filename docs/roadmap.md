@@ -5,7 +5,7 @@ Planned work, roughly in order, with why. Move an item to a [decision record](de
 ## Next
 
 1. **Finish the ISO-NE backfill** ([0013](decisions/0013-isone-backfill.md)): the remaining jobs one at a time ([runbook](runbook.md#backfill-a-feed)), then a `--full-refresh` of each backfilled feed's `__latest` model. Re-probe the history start dates in a few months to learn whether they're rolling windows.
-2. **ISO-NE's own forecasts** (`/hourlyloadforecast`, `/sevendayforecast`, `/sevendaywindpowerforecast`): the benchmark a load model has to beat at finer grain than EIA's daily copy (ISO-NE's day-ahead forecast averaged 2.5% error, 2019–2026, per EIA-930).
+2. **ISO-NE forecasts** ([0017](decisions/0017-isone-forecasts.md)): backfill the three feeds (mid-2019 on), then silver models (`__issued`, `__day_ahead`) and their columns in gold.
 3. **Dashboard** (Streamlit on Cloud Run, scaling to zero, like the MBTA site), reading `gold.grid_hourly` and `gold.grid_zone_hourly` ([0016](decisions/0016-first-gold-tables.md)): fuel mix, prices, load vs. temperature. Multiple pages from the start. Probably a subdomain of tylerclifton.com.
 
 ## Modeling, once history exists

@@ -28,6 +28,7 @@ with a day range, batched by month.
 import datetime
 import logging
 import os
+from zoneinfo import ZoneInfo
 
 # Import third party libraries
 import pandas
@@ -84,6 +85,25 @@ def day_batches(days=None):
     return [[day.strftime('%Y%m%d') for day in batch] for batch in backfill_batches()]
 
 
+def hour_starts(market_date, hour_endings):
+    """
+    The UTC start of each hour in one market day's list of hours ending, in
+    order (feeds that label hours by Eastern market date and hour ending,
+    "01"–"24", with "02X" for the repeated hour when clocks fall back).
+
+    The list is contiguous, so its last entry's end, an ordinary local time
+    (hour ending 24, or the last hour of a partial day, never during a clock
+    change), anchors it, and each earlier entry is one hour before the next.
+    That handles both clock changes without interpreting "02X" or a skipped
+    hour.
+    """
+    last_end_local = datetime.datetime.combine(market_date, datetime.time()) \
+        + datetime.timedelta(hours=int(hour_endings[-1][:2]))
+    last_end = last_end_local.replace(tzinfo=ZoneInfo(ISO_TIME_ZONE)).astimezone(datetime.timezone.utc)
+    count = len(hour_endings)
+    return [last_end - datetime.timedelta(hours=count - position) for position in range(count)]
+
+
 def records(body):
     """
     The list of records in one response.
@@ -103,13 +123,14 @@ def records(body):
     return content if isinstance(content, list) else [content]
 
 
-def fetch_days(feed, days, locations=(None,), keep=None):
+def fetch_days(feed, days, locations=(None,), keep=None, suffix=''):
     """
     Every record `feed` has for each of `days`, oldest day first. A feed served
     per location (five-minute prices) takes `locations`, one call each. For a
     feed served for every location at once (hourly prices, ~1,200 locations a
     day), `keep` filters each call's records as they arrive (e.g.
-    at_pricing_location), so only the kept ones are held in memory.
+    at_pricing_location), so only the kept ones are held in memory. `suffix`
+    goes after the day, for feeds with one (e.g. '/all' for every version).
     """
     username = os.getenv('ISONE_WS_USERNAME')
     password = os.getenv('ISONE_WS_PASSWORD')
@@ -119,7 +140,7 @@ def fetch_days(feed, days, locations=(None,), keep=None):
     all_records = []
     for day in days:
         for location in locations:
-            path = f"{feed}/day/{day}" + (f"/location/{location}" if location else '')
+            path = f"{feed}/day/{day}{suffix}" + (f"/location/{location}" if location else '')
             path_records = records(fetch(f"{API_URL}/{path}.json", auth=(username, password)).json())
             if keep:
                 path_records = [record for record in path_records if keep(record)]
@@ -145,10 +166,10 @@ def flatten_location(record):
     return {**flat, 'LocId': int(location['@LocId']), 'LocType': location['@LocType'], 'LocName': location['$']}
 
 
-def to_frame(records, columns, time_column='BeginDate'):
+def to_frame(records, columns, time_columns=('BeginDate',)):
     """
-    Records → a DataFrame of exactly `columns`, with `time_column` converted
-    to UTC.
+    Records → a DataFrame of exactly `columns`, with each of `time_columns`
+    converted to UTC.
 
     Fails the job if any record lacks one of the columns: a changed API should
     stop the load, not quietly write nulls into bronze.
@@ -158,5 +179,6 @@ def to_frame(records, columns, time_column='BeginDate'):
         fail(f"ISO-NE records are missing expected fields: {', '.join(missing)}")
 
     df = pandas.DataFrame(records, columns=columns)
-    df[time_column] = pandas.to_datetime(df[time_column], format='ISO8601', utc=True)
+    for column in time_columns:
+        df[column] = pandas.to_datetime(df[column], format='ISO8601', utc=True)
     return df

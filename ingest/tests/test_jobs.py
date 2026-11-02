@@ -552,3 +552,87 @@ def test_previous_runs_one_row_per_zone_hour_and_lead(run_job, backfill):
 def test_previous_runs_refuses_to_run_on_a_schedule(run_job):
     with pytest.raises(SystemExit):
         run_job('openmeteo-previous-runs', [])
+
+
+# ── ISO-NE forecasts (isone-load-forecast, isone-zonal-load-forecast, isone-wind-forecast; decision 0017) ──
+
+def load_forecast_day(*versions):
+    """A /hourlyloadforecast/all/day response: each version is (CreationDate, BeginDate, MW)."""
+    return {'HourlyLoadForecasts': {'HourlyLoadForecast': [
+        {'BeginDate': begin, 'CreationDate': created, 'LoadMw': mw, 'NetLoadMw': mw}
+        for created, begin, mw in versions
+    ]}}
+
+
+def test_load_forecast_keeps_every_version_in_utc(run_job, isone_login):
+    df = run_job('isone-load-forecast', [
+        load_forecast_day(('2026-10-28T07:32:51.000-04:00', '2026-10-30T12:00:00.000-04:00', 8610),
+                          ('2026-10-29T09:09:29.000-04:00', '2026-10-30T12:00:00.000-04:00', 8730)),
+        load_forecast_day(),
+    ])
+
+    urls = [request['url'] for request in run_job.requests]
+    assert all('/hourlyloadforecast/all/day/' in url for url in urls) and len(urls) == 2
+    assert len(df) == 2 and df['BeginDate'].nunique() == 1
+    assert str(df['CreationDate'].dt.tz) == 'UTC'
+    assert df['CreationDate'].iloc[0] == pd.Timestamp('2026-10-28T11:32:51', tz='UTC')
+    assert df['LoadMw'].tolist() == [8610.0, 8730.0]
+
+
+def test_zonal_load_forecast_asks_for_every_version(run_job, isone_login):
+    record = {'BeginDate': '2026-10-30T00:00:00.000-04:00', 'CreationDate': '2026-10-29T16:30:22.000-04:00',
+              'ReliabilityRegion': '.Z.CONNECTICUT', 'LoadMw': 2263.475, 'ReliabilityRegionLoadPercentage': 22.256}
+    day = {'ReliabilityRegionLoadForecasts': {'ReliabilityRegionLoadForecast': [record]}}
+    df = run_job('isone-zonal-load-forecast', [day, {'ReliabilityRegionLoadForecasts': {}}])
+
+    assert all(request['url'].endswith('/all.json') for request in run_job.requests)
+    assert df.loc[0, 'ReliabilityRegion'] == '.Z.CONNECTICUT' and df.loc[0, 'LoadMw'] == 2263.475
+
+
+def wind_publication(created, *market_days):
+    """A /sevendaywindpowerforecast/day response: market_days are (date, [hour endings])."""
+    return {'SevenDayWindForecasts': {'SevenDayWindForecast': [{
+        'BeginDate': created[:10] + 'T00:00:00.000-04:00', 'CreationDate': created,
+        'MarketDays': [{'MarketDate': f"{day}T00:00:00.000-04:00", 'Day': index + 1,
+                        'MarketDateInfo': {'MarketDateData': [{'HourEnding': ending, 'WindPowerForecast': 1000 + n}
+                                                              for n, ending in enumerate(endings)]}}
+                       for index, (day, endings) in enumerate(market_days)],
+    }]}}
+
+
+def test_wind_forecast_hours_through_the_fall_back_day(run_job, isone_login):
+    """Hour ending "02X" is the repeated hour: 25 distinct UTC hours, one apart."""
+    fall_back = ['01', '02', '02X'] + [f"{hour:02d}" for hour in range(3, 25)]
+    df = run_job('isone-wind-forecast', [wind_publication('2026-10-30T08:30:03.000-04:00', ('2026-11-01', fall_back)),
+                                         {'SevenDayWindForecasts': {}}])
+
+    assert len(df) == 25 and df['BeginDate'].nunique() == 25
+    assert set(df['BeginDate'].diff().dropna()) == {pd.Timedelta(hours=1)}
+    starts = dict(zip(df['HourEnding'], df['BeginDate'], strict=True))
+    assert starts['01'] == pd.Timestamp('2026-11-01T04:00', tz='UTC')   # midnight EDT
+    assert starts['02X'] == pd.Timestamp('2026-11-01T06:00', tz='UTC')  # 1 AM again, now EST
+    assert starts['24'] == pd.Timestamp('2026-11-02T04:00', tz='UTC')   # 11 PM EST
+
+
+def test_isone_hour_starts_through_the_spring_forward_day():
+    """A 23-hour day: the first hour still starts at local midnight."""
+    import datetime
+
+    from common.isone import hour_starts
+
+    endings = ['01'] + [f"{hour:02d}" for hour in range(3, 25)]
+    starts = hour_starts(datetime.date(2027, 3, 14), endings)
+
+    assert len(starts) == 23
+    assert starts[0] == datetime.datetime(2027, 3, 14, 5, tzinfo=datetime.timezone.utc)   # midnight EST
+    assert starts[-1] == datetime.datetime(2027, 3, 15, 3, tzinfo=datetime.timezone.utc)  # 11 PM EDT
+
+
+def test_wind_forecast_partial_first_day(run_job, isone_login):
+    """The publication day starts mid-day (hour ending 11 = 10 AM local)."""
+    df = run_job('isone-wind-forecast', [
+        wind_publication('2026-10-30T08:30:03.000-04:00', ('2026-10-30', [f"{hour:02d}" for hour in range(11, 25)])),
+        {'SevenDayWindForecasts': {}}])
+
+    assert df['BeginDate'].iloc[0] == pd.Timestamp('2026-10-30T14:00', tz='UTC')
+    assert str(df['MarketDate'].iloc[0]) == '2026-10-30'

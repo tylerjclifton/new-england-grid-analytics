@@ -63,7 +63,10 @@ gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --task-timeout=3
 | `ingest-isone-zonal-load` | 20250101–20261031 | ~670 | 15 min |
 | `ingest-isone-rt-lmp` (final only) | 20240101–20261028 | ~9,300 | 3 h |
 | `ingest-isone-rt-lmp-hourly` (backfill only) | 20190101–20241231 | ~2,200 (all-locations files) | 1 h |
-| `ingest-isone-da-lmp` | 20190101–20261101 | ~2,900 (all-locations files) | 1.2 h |
+| `ingest-isone-da-lmp` | 20190101–20261101 | ~2,900 (all-locations files) | 11 h (6 MB files, ~14 s each) |
+| `ingest-isone-load-forecast` | 20190101–20261101 | ~2,900 | 1 h |
+| `ingest-isone-zonal-load-forecast` | 20190101–20261101 | ~2,900 (~270 KB files) | 2–3 h |
+| `ingest-isone-wind-forecast` | 20190101–20261101 | ~2,900 | 1 h |
 | `ingest-eia-region-data` | 20190101–20261031 | ~95 | 5 min |
 | `ingest-eia-fuel-type-data` | 20190101–20261031 | ~190 | 10 min |
 | `ingest-eia-region-data-bulk` (backfill only) | 20150701–20181231 | 7 files | 5 min |

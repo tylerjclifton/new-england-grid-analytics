@@ -18,6 +18,7 @@ A data engineering and modeling project on the New England electric grid: what i
 | ISO-NE web services | Five-minute load per load zone, with each zone's rooftop solar estimate | Every 6 hours | Every interval for yesterday and today |
 | ISO-NE web services | Five-minute real-time prices at the Hub and eight load zones (energy, congestion, losses) | Every 6 hours | Preliminary prices for yesterday and today; final prices for 2–3 days ago ([0012](docs/decisions/0012-isone-prices.md)) |
 | ISO-NE web services | Hourly day-ahead prices at the Hub and eight load zones | Every 6 hours | Today and tomorrow (tomorrow once the market clears, around midday) |
+| ISO-NE web services | ISO-NE's own forecasts: hourly system and zonal load (every version issued), and seven-day wind power | Every 6 hours | Yesterday's versions (complete) and tomorrow's so far; wind: yesterday's and today's publications ([0017](docs/decisions/0017-isone-forecasts.md)) |
 | EIA-930 API | ISO New England hourly demand, ISO-NE's day-ahead demand forecast, net generation, interchange | Daily | The last 14 days (EIA revises recent hours; [0014](docs/decisions/0014-eia-930.md)) |
 | EIA-930 API | ISO New England hourly net generation by fuel | Daily | The last 14 days |
 | Open-Meteo archive API | Hourly reanalysis (the best estimate of past weather) for the same points and variables | Daily | The last 14 days through yesterday ([0015](docs/decisions/0015-weather-history.md)) |
@@ -56,6 +57,9 @@ Each layer is its own BigQuery dataset.
 | `isone_zonal_load` | five-minute interval × load zone × ingest run | ~3,500 rows per run, ~400 MB/year |
 | `isone_rt_lmp` | five-minute interval × location × version (prelim/final) × ingest run | ~9,900 rows per run, ~1.5 GB/year: the largest table ([0012](docs/decisions/0012-isone-prices.md)) |
 | `isone_da_lmp` | hour × location × ingest run | ~440 rows per run, ~65 MB/year |
+| `isone_load_forecast` | hour × version × ingest run | ~400 rows per run; every version ISO-NE issued, from two days before ([0017](docs/decisions/0017-isone-forecasts.md)) |
+| `isone_zonal_load_forecast` | hour × zone × version × ingest run | ~2,500 rows per run, ~200 MB/year |
+| `isone_wind_forecast` | publication × hour × ingest run | ~340 rows per run; hour converted from ISO-NE's hour ending |
 | `isone_rt_lmp_hourly` | hour × location × ingest run | Backfill only: hourly real-time prices for 2019–2024, before the five-minute history ([0013](docs/decisions/0013-isone-backfill.md)) |
 | `eia_region_data` | hour × measure × ingest run | ~1,300 rows per daily run (two weeks re-pulled), ~50 MB/year; history from 2019 ([0014](docs/decisions/0014-eia-930.md)) |
 | `eia_fuel_type_data` | hour × fuel × ingest run | ~3,700 rows per daily run, ~115 MB/year; history from 2019 |
@@ -196,6 +200,9 @@ ingest/                    One shared image for every ingest job
   isone-zonal-load/        ISO-NE five-minute load per load zone (every 6 hours)
   isone-rt-lmp/            ISO-NE five-minute real-time prices, prelim and final (every 6 hours)
   isone-da-lmp/            ISO-NE hourly day-ahead prices (every 6 hours)
+  isone-load-forecast/     ISO-NE's hourly system load forecast, every version (every 6 hours)
+  isone-zonal-load-forecast/ ISO-NE's hourly load forecast per zone, every version (every 6 hours)
+  isone-wind-forecast/     ISO-NE's seven-day wind power forecast (every 6 hours)
   isone-rt-lmp-hourly/     ISO-NE hourly real-time prices, 2019–2024 (backfill only)
   eia-region-data/         EIA-930 demand, demand forecast, generation, interchange (daily)
   eia-fuel-type-data/      EIA-930 generation by fuel (daily)

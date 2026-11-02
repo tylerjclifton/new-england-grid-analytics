@@ -40,7 +40,7 @@ for days in day_batches():
     # ── Shape ─────────────────────────────────────────────────────────────────
 
     df = (
-        to_frame(records, COLUMNS, time_column='interval_begin_date')
+        to_frame(records, COLUMNS, time_columns=['interval_begin_date'])
         .astype({'load_zone_id': 'int64', **dict.fromkeys(MEASURES, 'float64')})
     )
     if not df.empty:
