@@ -207,6 +207,7 @@ def test_isone_records_unwrap_three_levels_and_empty_days():
 
     assert records({'a': {'b': {'c': [{'x': 1}, {'x': 2}]}}}) == [{'x': 1}, {'x': 2}]
     assert records({'isone_web_services': {}}) == []
+    assert records({'SevenDayWindForecasts': {'SevenDayWindForecast': [{}]}}) == []  # wind, before its history
     assert records({'a': {'b': {'x': 1, 'y': 2}}}) == [{'x': 1, 'y': 2}]
 
 

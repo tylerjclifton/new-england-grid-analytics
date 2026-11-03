@@ -112,15 +112,17 @@ def records(body):
     feed: {"GenFuelMixes": {"GenFuelMix": [...]}}, or
     {"isone_web_services": {"five_min_estimated_zonal_loads":
     {"five_min_estimated_zonal_load": [...]}}}. A day with no data comes back
-    with an empty object or an empty list at any of those levels, and a lone
-    record may come back as an object rather than a one-item list.
+    as an empty object or an empty list at any of those levels, or as a list
+    holding one empty object (the wind forecast before its history begins), and
+    a lone record may come back as an object rather than a one-item list. An
+    empty object is never a record.
     """
     content = body
     while isinstance(content, dict) and len(content) == 1:
         content = next(iter(content.values()))
     if not content:
         return []
-    return content if isinstance(content, list) else [content]
+    return [record for record in (content if isinstance(content, list) else [content]) if record]
 
 
 def fetch_days(feed, days, locations=(None,), keep=None, suffix=''):
