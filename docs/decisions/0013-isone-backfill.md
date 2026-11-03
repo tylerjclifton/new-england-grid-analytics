@@ -9,8 +9,8 @@ The scheduled ISO-NE jobs ([0010](0010-isone-day-files.md), [0012](0012-isone-pr
 |---|---|
 | Day-ahead prices, hourly real-time prices (final) | between 2019-01 and 2019-06 |
 | Fuel mix | between 2019-05 and 2019-06 |
-| Five-minute real-time prices (final) | between 2024-01 and 2024-09 |
-| System load (with the rooftop solar estimate) | between 2024-04 and 2024-06 |
+| Five-minute real-time prices (final) | between 2024-01 and 2024-09 (2024-06-01, once backfilled) |
+| System load (with the rooftop solar estimate) | between 2024-04 and 2024-06 (2024-06-01, once backfilled) |
 | Zonal load | between 2025-01-15 and 2025-02-01 |
 
 Whether these are launch dates or rolling retention windows can't be told from one look. If they roll, every day waited is a day lost for good, so backfill now ([0001](0001-append-only-bronze.md)).

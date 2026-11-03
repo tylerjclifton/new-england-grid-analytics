@@ -61,7 +61,7 @@ def run_job(monkeypatch):
             return FakeResponse(next(bodies))
 
         monkeypatch.setattr(fetch.requests, "get", fake_get)
-        monkeypatch.setattr(load, "append_to_bronze", _run.loads.append)
+        monkeypatch.setattr(load, "append_to_bronze", lambda df, **kwargs: _run.loads.append(df))
 
         script = INGEST_DIR / job / "main.py"
         with mock.patch.object(sys, "argv", [str(script)]):

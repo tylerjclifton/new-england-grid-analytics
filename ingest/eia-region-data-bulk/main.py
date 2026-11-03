@@ -26,6 +26,7 @@ import pandas
 
 # Import shared ingest helpers
 from common.backfill import backfill_days, is_backfill
+from common.eia import REGION_COLUMNS
 from common.fetch import fetch
 from common.load import append_to_bronze
 from common.run import fail
@@ -41,8 +42,6 @@ MEASURES = {
 }
 TIME_COLUMN = 'UTC Time at End of Hour'  # e.g. "07/01/2015 5:00:00 AM"
 
-# Output columns: the same as eia_region_data
-COLUMNS = ['period', 'respondent', 'respondent_name', 'type', 'type_name', 'value', 'value_units']
 
 # Backfill only: the API covers 2019 on, every day
 if not is_backfill():
@@ -78,9 +77,8 @@ for year, half in halves:
     df['type']      = df['column'].map(lambda column: MEASURES[column][0])
     df['type_name'] = df['column'].map(lambda column: MEASURES[column][1])
     df['value']     = pandas.to_numeric(df['value'].str.replace(',', ''), errors='raise').astype('float64')
-    df = df.assign(respondent='ISNE', respondent_name='ISO New England', value_units='megawatthours')[COLUMNS]
-    logging.info(f"Shaped {len(df)} rows: {df['period'].min()} to {df['period'].max()}")
+    df = df.assign(respondent='ISNE', respondent_name='ISO New England', value_units='megawatthours')[REGION_COLUMNS]
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='period')

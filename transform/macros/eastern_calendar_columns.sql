@@ -9,8 +9,8 @@
     Usage — in a select with a UTC hour column:
       SELECT hour_start_at, {{ eastern_calendar_columns('hour_start_at') }}, …
   -#}
-    DATE({{ column }}, 'America/New_York')                                        AS date_local,
-    EXTRACT(HOUR FROM DATETIME({{ column }}, 'America/New_York'))                 AS hour_local,
+    DATE({{ column }}, 'America/New_York')                                        AS local_date,
+    EXTRACT(HOUR FROM DATETIME({{ column }}, 'America/New_York'))                 AS local_hour,
     EXTRACT(DAYOFWEEK FROM DATETIME({{ column }}, 'America/New_York'))            AS day_of_week,
     EXTRACT(DAYOFWEEK FROM DATETIME({{ column }}, 'America/New_York')) IN (1, 7)  AS is_weekend
 {%- endmacro %}

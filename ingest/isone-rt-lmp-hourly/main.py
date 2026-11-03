@@ -15,18 +15,19 @@ Each run:   Final prices for every day in the backfill range, a month at a time.
 Writes to:  bronze.isone_rt_lmp_hourly (append) — one row per hour × location × run
 """
 
-# Import standard libraries
-import logging
-
 # Import shared ingest helpers
 from common.backfill import is_backfill
-from common.isone import at_pricing_location, day_batches, fetch_days, flatten_location, to_frame
+from common.isone import (
+    LMP_COLUMNS,
+    LMP_PRICES,
+    at_pricing_location,
+    day_batches,
+    fetch_days,
+    flatten_location,
+    to_frame,
+)
 from common.load import append_to_bronze
 from common.run import fail
-
-# Record fields under ISO-NE's names (the location flattened by flatten_location)
-PRICES  = ['LmpTotal', 'EnergyComponent', 'CongestionComponent', 'LossComponent']
-COLUMNS = ['BeginDate', 'LocId', 'LocType', 'LocName', *PRICES]
 
 # Backfill only: a scheduled run would duplicate the five-minute feed
 if not is_backfill():
@@ -41,10 +42,11 @@ for days in day_batches():
 
     # ── Shape ─────────────────────────────────────────────────────────────────
 
-    df = to_frame([flatten_location(record) for record in records], COLUMNS).astype(dict.fromkeys(PRICES, 'float64'))
-    if not df.empty:
-        logging.info(f"Shaped {len(df)} rows: {df['BeginDate'].min()} to {df['BeginDate'].max()}")
+    df = (
+        to_frame([flatten_location(record) for record in records], LMP_COLUMNS)
+        .astype(dict.fromkeys(LMP_PRICES, 'float64'))
+    )
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='BeginDate')

@@ -20,9 +20,6 @@ Each run:   Every interval for yesterday and today (Eastern days, see
 Writes to:  bronze.isone_system_load (append) — one row per interval × run
 """
 
-# Import standard libraries
-import logging
-
 # Import shared ingest helpers
 from common.isone import day_batches, fetch_days, to_frame
 from common.load import append_to_bronze
@@ -41,9 +38,7 @@ for days in day_batches():
     # ── Shape ─────────────────────────────────────────────────────────────────
 
     df = to_frame(records, COLUMNS).astype(dict.fromkeys(MEASURES, 'float64'))
-    if not df.empty:
-        logging.info(f"Shaped {len(df)} rows: {df['BeginDate'].min()} to {df['BeginDate'].max()}")
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='BeginDate')

@@ -18,6 +18,11 @@ sources:
     schema: bronze
     config:
       loaded_at_field: ingested_at
+      # Every table not overridden below is written every 6 hours; the slack
+      # covers one failed run
+      freshness:
+        warn_after: {count: 7, period: hour}
+        error_after: {count: 13, period: hour}
 
     tables:
       - name: openmeteo_forecast
@@ -26,11 +31,6 @@ sources:
           (metric) units. Every run is kept: hours ahead are what was forecast
           at ingested_at; past hours are the model's best estimate.
           Grain: load zone × hour × ingest run.
-        config:
-          freshness:
-            # Every 6 hours; the slack covers one failed run
-            warn_after: {count: 7, period: hour}
-            error_after: {count: 13, period: hour}
 
       - name: isone_fuel_mix
         description: >
@@ -38,33 +38,18 @@ sources:
           times, MW per fuel running (a fuel not running is absent, not 0).
           Each run re-pulls yesterday and today (decision 0010).
           Grain: snapshot × fuel × ingest run.
-        config:
-          freshness:
-            # Every 6 hours; the slack covers one failed run
-            warn_after: {count: 7, period: hour}
-            error_after: {count: 13, period: hour}
 
       - name: isone_system_load
         description: >
           ISO-NE five-minute system load, with ISO-NE's behind-the-meter
           (rooftop) solar estimate. Each run re-pulls yesterday and today
           (decision 0010). Grain: five-minute interval × ingest run.
-        config:
-          freshness:
-            # Every 6 hours; the slack covers one failed run
-            warn_after: {count: 7, period: hour}
-            error_after: {count: 13, period: hour}
 
       - name: isone_zonal_load
         description: >
           ISO-NE five-minute estimated load per load zone, with each zone's
           rooftop solar estimate. Each run re-pulls yesterday and today
           (decision 0010). Grain: five-minute interval × load zone × ingest run.
-        config:
-          freshness:
-            # Every 6 hours; the slack covers one failed run
-            warn_after: {count: 7, period: hour}
-            error_after: {count: 13, period: hour}
 
       - name: isone_rt_lmp
         description: >
@@ -72,22 +57,12 @@ sources:
           preliminary for yesterday and today, final for 2–3 days ago, labelled
           by LmpType (decision 0012). Grain: five-minute interval × location ×
           version × ingest run.
-        config:
-          freshness:
-            # Every 6 hours; the slack covers one failed run
-            warn_after: {count: 7, period: hour}
-            error_after: {count: 13, period: hour}
 
       - name: isone_da_lmp
         description: >
           ISO-NE hourly day-ahead prices at the Hub and eight load zones, today
           and tomorrow each run (decision 0012). Grain: hour × location × ingest
           run.
-        config:
-          freshness:
-            # Every 6 hours; the slack covers one failed run
-            warn_after: {count: 7, period: hour}
-            error_after: {count: 13, period: hour}
 
       - name: isone_rt_lmp_hourly
         description: >
@@ -95,6 +70,8 @@ sources:
           2019–2024: a one-off backfill of the years before the five-minute
           history (decision 0013). No freshness check: nothing writes it on a
           schedule. Grain: hour × location × ingest run.
+        config:
+          freshness: null
 
       - name: eia_region_data
         description: >
@@ -102,8 +79,7 @@ sources:
           interchange for ISO New England, from the API, 2019 on (decision 0014).
           Hours labelled by their end. Grain: hour × measure × ingest run.
         config:
-          freshness:
-            # Daily; the slack covers one failed run
+          freshness:  # daily, not every 6 hours; the slack covers one failed run
             warn_after: {count: 26, period: hour}
             error_after: {count: 50, period: hour}
 
@@ -112,6 +88,8 @@ sources:
           The same measures for 2015-07 to 2018-12, from EIA's bulk files in the
           API's shape: a one-off backfill (decision 0014). No freshness check.
           Grain: hour × measure × ingest run.
+        config:
+          freshness: null
 
       - name: eia_fuel_type_data
         description: >
@@ -119,8 +97,7 @@ sources:
           API, 2019 on (decision 0014). Hours labelled by their end. Grain: hour
           × fuel × ingest run.
         config:
-          freshness:
-            # Daily; the slack covers one failed run
+          freshness:  # daily, not every 6 hours; the slack covers one failed run
             warn_after: {count: 26, period: hour}
             error_after: {count: 50, period: hour}
 
@@ -130,8 +107,7 @@ sources:
           point per ISO-NE load zone, in source units, from 2015-07 (decision
           0015). Grain: load zone × hour × ingest run.
         config:
-          freshness:
-            # Daily; the slack covers one failed run
+          freshness:  # daily, not every 6 hours; the slack covers one failed run
             warn_after: {count: 26, period: hour}
             error_after: {count: 50, period: hour}
 
@@ -140,3 +116,20 @@ sources:
           Open-Meteo past forecasts as issued, 1 and 2 days ahead, one point
           per ISO-NE load zone, 2021 to 2026-10-28: a one-off backfill (decision
           0015). No freshness check. Grain: load zone × hour × lead × ingest run.
+        config:
+          freshness: null
+
+      - name: isone_load_forecast
+        description: >
+          ISO-NE's hourly system load forecast, every version issued (decision
+          0017). Grain: hour × version × ingest run.
+
+      - name: isone_zonal_load_forecast
+        description: >
+          ISO-NE's hourly load forecast per load zone, every version issued
+          (decision 0017). Grain: hour × zone × version × ingest run.
+
+      - name: isone_wind_forecast
+        description: >
+          ISO-NE's seven-day wind power forecast, one published each day
+          (decision 0017). Grain: publication × hour × ingest run.

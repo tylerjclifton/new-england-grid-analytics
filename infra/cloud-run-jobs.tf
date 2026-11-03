@@ -16,130 +16,68 @@ locals {
   ingest_max_retries    = 1
   transform_max_retries = 0
 
-  # One entry per ingest job. Key = job folder under ingest/ = bronze table
-  # name with "-" for "_" (e.g. openmeteo-forecast → bronze.openmeteo_forecast).
-  #   schedule cron, or null for a backfill-only job (run by hand, decision 0013)
+  # Settings every ingest job shares, unless its entry below overrides them:
+  #   memory   512 MiB: a job holds at most a month of one feed (backfills
+  #            batch by month, decision 0013)
   #   timeout  per scheduled run: 15 minutes, which covers fetch()'s ~8
   #            minutes of retries if a source is rate-limiting or down; a
   #            backfill execution sets its own (--task-timeout, docs/runbook.md)
   #   secrets  env var name → Secret Manager secret (secrets.tf) the job reads
   #   env      plain job-specific settings
-  ingest_jobs = {
-    "openmeteo-forecast" = {
-      schedule = var.weather_forecast_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One request covering every load zone
-      secrets  = {}
-      env      = {}
-    }
-    "openmeteo-archive" = {
-      schedule = var.weather_archive_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One request (two weeks, every load zone)
-      secrets  = {}
-      env      = {}
-    }
-    "openmeteo-previous-runs" = {
-      schedule = null # Backfill only: past forecasts before 2026-10-29
-      memory   = "512Mi"
-      timeout  = "900s"
-      secrets  = {}
-      env      = {}
-    }
-    "isone-fuel-mix" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One request per day (yesterday and today)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-system-load" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One request per day (yesterday and today)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-zonal-load" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One request per day (yesterday and today)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-rt-lmp" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # 36 requests (2 versions × 2 days × 9 locations), ~10 s
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-da-lmp" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # 2 requests (all-locations files for today and tomorrow)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-load-forecast" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # 2 requests (yesterday and tomorrow, every version)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-zonal-load-forecast" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # 2 requests (yesterday and tomorrow, every version)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-wind-forecast" = {
-      schedule = var.isone_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # 2 requests (yesterday's and today's publications)
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "isone-rt-lmp-hourly" = {
-      schedule = null # Backfill only: hourly prices from before the five-minute history
-      memory   = "512Mi"
-      timeout  = "900s"
-      secrets  = local.isone_login
-      env      = {}
-    }
-    "eia-region-data" = {
-      schedule = var.eia_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One page (two weeks × 4 measures)
-      secrets  = { EIA_API_KEY = "eia-api-key" }
-      env      = {}
-    }
-    "eia-fuel-type-data" = {
-      schedule = var.eia_ingestion_schedule
-      memory   = "512Mi"
-      timeout  = "900s" # One page (two weeks × ~11 fuels)
-      secrets  = { EIA_API_KEY = "eia-api-key" }
-      env      = {}
-    }
-    "eia-region-data-bulk" = {
-      schedule = null  # Backfill only: 2015–2018, before the API's history
-      memory   = "1Gi" # Each bulk file is ~45 MB of CSV
-      timeout  = "900s"
-      secrets  = {} # The bulk files need no key
-      env      = {}
-    }
+  ingest_job_defaults = {
+    memory  = "512Mi"
+    timeout = "900s"
+    secrets = {}
+    env     = {}
   }
 
-  # The jobs Cloud Scheduler triggers (cloud-scheduler.tf, iam.tf)
-  scheduled_ingest_jobs = { for job, config in local.ingest_jobs : job => config if config.schedule != null }
-
-  # The ISO Express login every ISO-NE job reads (ingest/common/isone.py)
+  # The credentials the jobs read (ingest/common/isone.py, ingest/common/eia.py)
   isone_login = {
     ISONE_WS_USERNAME = "isone-ws-username"
     ISONE_WS_PASSWORD = "isone-ws-password"
   }
+  eia_key = { EIA_API_KEY = "eia-api-key" }
+
+  # One entry per ingest job: its schedule (cron, or null for a backfill-only
+  # job run by hand, decision 0013) and anything it doesn't share with the
+  # defaults. Key = job folder under ingest/ = bronze table name with "-" for
+  # "_" (e.g. openmeteo-forecast → bronze.openmeteo_forecast).
+  ingest_job_settings = {
+    # One request covering every load zone
+    "openmeteo-forecast" = { schedule = var.weather_forecast_ingestion_schedule }
+    # One request: two weeks, every load zone
+    "openmeteo-archive" = { schedule = var.weather_archive_ingestion_schedule }
+    # Backfill only: past forecasts before 2026-10-29
+    "openmeteo-previous-runs" = { schedule = null }
+
+    # One request per day (yesterday and today)
+    "isone-fuel-mix"    = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    "isone-system-load" = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    "isone-zonal-load"  = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    # 36 requests (2 versions × 2 days × 9 locations), ~10 s
+    "isone-rt-lmp" = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    # 2 requests: all-locations files for today and tomorrow
+    "isone-da-lmp" = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    # 2 requests each: yesterday and tomorrow, every version
+    "isone-load-forecast"       = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    "isone-zonal-load-forecast" = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    # 2 requests: yesterday's and today's publications
+    "isone-wind-forecast" = { schedule = var.isone_ingestion_schedule, secrets = local.isone_login }
+    # Backfill only: hourly prices from before the five-minute history
+    "isone-rt-lmp-hourly" = { schedule = null, secrets = local.isone_login }
+
+    # One page each: two weeks × 4 measures, two weeks × ~11 fuels
+    "eia-region-data"    = { schedule = var.eia_ingestion_schedule, secrets = local.eia_key }
+    "eia-fuel-type-data" = { schedule = var.eia_ingestion_schedule, secrets = local.eia_key }
+    # Backfill only: 2015–2018 from the bulk files (no key), ~45 MB of CSV each
+    "eia-region-data-bulk" = { schedule = null, memory = "1Gi" }
+  }
+
+  # Every ingest job's full settings: the defaults, overridden by its entry
+  ingest_jobs = { for job, settings in local.ingest_job_settings : job => merge(local.ingest_job_defaults, settings) }
+
+  # The jobs Cloud Scheduler triggers (cloud-scheduler.tf, iam.tf)
+  scheduled_ingest_jobs = { for job, config in local.ingest_jobs : job => config if config.schedule != null }
 }
 
 # ── Ingest jobs ───────────────────────────────────────────────────────────────

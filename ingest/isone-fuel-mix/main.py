@@ -17,9 +17,6 @@ A fuel that isn't running is left out of a snapshot, not listed at 0 (oil
 most of the year), so missing means zero; gold fills those in.
 """
 
-# Import standard libraries
-import logging
-
 # Import shared ingest helpers
 from common.isone import day_batches, fetch_days, to_frame
 from common.load import append_to_bronze
@@ -37,9 +34,7 @@ for days in day_batches():
     # ── Shape ─────────────────────────────────────────────────────────────────
 
     df = to_frame(records, COLUMNS).astype({'GenMw': 'float64'})
-    if not df.empty:
-        logging.info(f"Shaped {len(df)} rows: {df['BeginDate'].min()} to {df['BeginDate'].max()}")
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='BeginDate')

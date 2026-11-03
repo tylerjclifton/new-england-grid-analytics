@@ -19,9 +19,6 @@ Writes to:  bronze.isone_zonal_load (append) — one row per interval × load
             zone × run
 """
 
-# Import standard libraries
-import logging
-
 # Import shared ingest helpers
 from common.isone import day_batches, fetch_days, to_frame
 from common.load import append_to_bronze
@@ -43,9 +40,7 @@ for days in day_batches():
         to_frame(records, COLUMNS, time_columns=['interval_begin_date'])
         .astype({'load_zone_id': 'int64', **dict.fromkeys(MEASURES, 'float64')})
     )
-    if not df.empty:
-        logging.info(f"Shaped {len(df)} rows: {df['interval_begin_date'].min()} to {df['interval_begin_date'].max()}")
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='interval_begin_date')

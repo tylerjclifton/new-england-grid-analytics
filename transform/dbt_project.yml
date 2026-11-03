@@ -26,9 +26,18 @@ clean-targets: ["target", "dbt_packages"]
 #   gold   — tables for the dashboard and models, rebuilt every run
 models:
   new_england_grid_analytics:
+    # Model and column descriptions (the yml files) appear in BigQuery's console
+    +persist_docs:
+      relation: true
+      columns: true
     silver:
       +schema: silver
       +materialized: view
+      # How every incremental silver model updates (they set unique_key and
+      # cluster_by themselves): merge new ingest runs in on the unique key,
+      # and add any new column rather than fail (macros/new_ingest_runs.sql)
+      +incremental_strategy: merge
+      +on_schema_change: append_new_columns
     gold:
       +schema: gold
       +materialized: table

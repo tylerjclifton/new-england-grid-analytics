@@ -5,11 +5,11 @@
   point, 2021 to 2026-10-28 (see openmeteo_previous_runs__base): the weather a
   day-ahead model may train on.
 
-  Incremental: each run reads only ingest runs added since the last one (the
-  ingested_at literal prunes bronze's partitions through the __base view) and
-  merges them in on load zone × hour × lead. It's a one-off backfill, so the
-  table holds ~820,000 rows and grows only if the backfill is re-run.
-  `dbt build --full-refresh` rebuilds it from all of bronze.
+  Incremental: each run reads only ingest runs added since the last one
+  (macros/new_ingest_runs.sql) and merges them in on load zone × hour × lead.
+  It's a one-off backfill, so the table holds ~820,000 rows and grows only if
+  the backfill is re-run. `dbt build --full-refresh` rebuilds it from all of
+  bronze.
 
   Steps:
     1. new_runs        — rows ingested after the newest one already here
@@ -21,25 +21,17 @@
     config(
         materialized='incremental',
         unique_key=['load_zone', 'hour_at', 'lead_days'],
-        incremental_strategy='merge',
         cluster_by=['load_zone', 'hour_at'],
-        on_schema_change='append_new_columns'
+        partition_by=monthly_partitions('hour_at'),
+        incremental_predicates=recent_merge_window('hour_at')
     )
 }}
 
-{#- The newest ingest run already processed (none on a first build), compiled
-    in as a literal so bronze's partitions are pruned -#}
-{%- set processed_through = last_processed_run() %}
-
 WITH
 
-    -- 1. Ingest runs not yet processed (all of bronze on the first run)
+    -- 1. Ingest runs not yet processed (all of bronze on a first build)
     new_runs AS (
-        SELECT *
-        FROM {{ ref('openmeteo_previous_runs__base') }}
-        {%- if processed_through %}
-        WHERE ingested_at > TIMESTAMP '{{ processed_through }}'
-        {%- endif %}
+        {{ new_ingest_runs(ref('openmeteo_previous_runs__base')) }}
     )
 
 -- 2. Newest value per load zone × hour × lead

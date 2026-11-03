@@ -1,5 +1,5 @@
 {#
-  silver.eia_region_data__by_hour — one row per hour
+  silver.eia_region_data__hourly — one row per hour
 
   ISO New England's hour from EIA-930, one measure per column: demand, ISO-NE's
   own day-ahead forecast of it, net generation, and interchange (net exports;

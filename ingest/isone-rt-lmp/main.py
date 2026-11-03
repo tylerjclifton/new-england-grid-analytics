@@ -22,17 +22,19 @@ twelve five-minute prices, so silver or gold can derive it, while price
 spikes that last minutes would be lost in an hourly feed.
 """
 
-# Import standard libraries
-import logging
-
 # Import shared ingest helpers
 from common.backfill import is_backfill
-from common.isone import PRICING_LOCATIONS, day_batches, eastern_days, fetch_days, flatten_location, to_frame
+from common.isone import (
+    LMP_COLUMNS,
+    LMP_PRICES,
+    PRICING_LOCATIONS,
+    day_batches,
+    eastern_days,
+    fetch_days,
+    flatten_location,
+    to_frame,
+)
 from common.load import append_to_bronze
-
-# Record fields under ISO-NE's names (the location flattened by flatten_location)
-PRICES  = ['LmpTotal', 'EnergyComponent', 'CongestionComponent', 'LossComponent']
-COLUMNS = ['BeginDate', 'LocId', 'LocType', 'LocName', *PRICES]
 
 # Which days to pull as each version (offsets from today, Eastern). A backfill
 # is history, so final prices only, for its range (day_batches() supplies it).
@@ -56,13 +58,11 @@ for lmp_type, version_days in DAYS_BY_LMP_TYPE.items():
 
         # Each row labelled with the version it is
         df = (
-            to_frame([flatten_location(record) for record in records], COLUMNS)
-            .astype(dict.fromkeys(PRICES, 'float64'))
+            to_frame([flatten_location(record) for record in records], LMP_COLUMNS)
+            .astype(dict.fromkeys(LMP_PRICES, 'float64'))
             .assign(LmpType=lmp_type)
         )
-        if not df.empty:
-            logging.info(f"Shaped {len(df)} {lmp_type} rows: {df['BeginDate'].min()} to {df['BeginDate'].max()}")
 
         # ── Write ─────────────────────────────────────────────────────────────
 
-        append_to_bronze(df)
+        append_to_bronze(df, time_column='BeginDate')

@@ -23,9 +23,11 @@ from google.cloud import bigquery
 from common.run import JOB_NAME, RUN_STARTED_AT, fail
 
 
-def append_to_bronze(df: pandas.DataFrame):
+def append_to_bronze(df: pandas.DataFrame, time_column=None):
     """
     Append a DataFrame to this job's bronze table, adding the audit columns.
+    `time_column` (the rows' timestamp) puts the time range they cover in the
+    log line, so every job reports what it loaded the same way.
 
     The target comes from BQ_PROJECT_ID / BQ_DATASET_ID / BQ_TABLE_ID, which
     the Cloud Run jobs set (infra/cloud-run-jobs.tf). Without them, as in a
@@ -57,4 +59,5 @@ def append_to_bronze(df: pandas.DataFrame):
     except Exception as error:
         fail(f"BigQuery load into {table_ref} failed: {error}")
 
-    logging.info(f"Appended {len(df)} rows to {table_ref}")
+    covers = f" covering {df[time_column].min()} to {df[time_column].max()}" if time_column else ''
+    logging.info(f"Appended {len(df)} rows to {table_ref}{covers}")

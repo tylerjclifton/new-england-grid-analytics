@@ -52,7 +52,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: &load_zones [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
       - name: location_name
         description: City the point is placed at.
       - name: hour_at
@@ -128,7 +128,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: *load_zones
       - name: hour_at
         description: Hour the values are for (UTC).
         data_tests: [not_null]
@@ -189,7 +189,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: *load_zones
       - name: hour_at
         description: Hour the forecast is for (UTC).
         data_tests: [not_null]
@@ -349,7 +349,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: *load_zones
       - name: load_zone_id
         description: ISO-NE location ID of the zone (4001–4008).
       - name: load_mw
@@ -408,7 +408,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: &pricing_locations [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
       - name: location_id
         description: ISO-NE location ID (4000 the Hub, 4001–4008 the load zones).
       - name: lmp_usd_mwh
@@ -464,7 +464,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: *pricing_locations
       - name: location_id
         description: ISO-NE location ID (4000 the Hub, 4001–4008 the load zones).
       - name: lmp_usd_mwh
@@ -516,7 +516,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [HUB, ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
+                values: *pricing_locations
       - name: location_id
         description: ISO-NE location ID (4000 the Hub, 4001–4008 the load zones).
       - name: lmp_usd_mwh
@@ -598,7 +598,7 @@ models:
         description: The ingest run this version came from (UTC).
         data_tests: [not_null]
 
-  - name: eia_region_data__by_hour
+  - name: eia_region_data__hourly
     description: >
       One row per hour for ISO New England: demand, ISO-NE's day-ahead demand
       forecast, net generation and interchange side by side. A view over
@@ -657,6 +657,183 @@ models:
       - name: ingested_at
         description: The ingest run this version came from (UTC).
         data_tests: [not_null]
+
+  # ── ISO-NE: forecasts (decision 0017) ───────────────────────────────────────
+
+  - name: isone_load_forecast__base
+    description: >
+      Every version of ISO-NE's hourly system load forecast, one row per hour ×
+      version × ingest run. No tests: they would scan all of bronze (see header).
+    columns:
+      - name: hour_start_at
+        description: Start of the hour forecast (UTC).
+      - name: issued_at
+        description: When ISO-NE issued the version (UTC).
+      - name: lead_hours
+        description: Hours from issue to the hour's start; negative for versions issued during the hour's own day.
+
+  - name: isone_load_forecast__issued
+    description: >
+      Each version of ISO-NE's system load forecast, once per hour × version.
+      Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, issued_at]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour forecast (UTC).
+        data_tests: [not_null]
+      - name: issued_at
+        description: When ISO-NE issued the version (UTC).
+        data_tests: [not_null]
+      - name: lead_hours
+        description: Hours from issue to the hour's start.
+      - name: load_mw
+        description: Forecast system load, MW.
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 40000
+      - name: net_load_mw
+        description: Forecast load net of ISO-NE's adjustments, MW.
+
+  - name: isone_load_forecast__day_ahead
+    description: >
+      ISO-NE's system load forecast as it stood at 10:00 Eastern the day before
+      each hour: the day-ahead benchmark. A view over the __issued table.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour forecast (UTC).
+      - name: issued_at
+        description: When the benchmark version was issued (UTC).
+      - name: load_mw
+        description: Day-ahead forecast system load, MW.
+
+  - name: isone_zonal_load_forecast__base
+    description: >
+      Every version of ISO-NE's hourly load forecast per zone, one row per hour
+      × zone × version × ingest run. No tests: they would scan all of bronze.
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone (ME … NEMA), from its name via the isone_pricing_locations seed.
+      - name: issued_at
+        description: When ISO-NE issued the version (UTC).
+
+  - name: isone_zonal_load_forecast__issued
+    description: >
+      Each version of ISO-NE's zonal load forecast, once per hour × zone ×
+      version. Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, load_zone, issued_at]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour forecast (UTC).
+        data_tests: [not_null]
+      - name: load_zone
+        description: ISO-NE load zone.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: *load_zones
+      - name: issued_at
+        description: When ISO-NE issued the version (UTC).
+        data_tests: [not_null]
+      - name: lead_hours
+        description: Hours from issue to the hour's start.
+      - name: load_mw
+        description: >
+          Forecast load in the zone, MW. ISO-NE's history has the odd impossible
+          version, kept as issued (e.g. Connecticut −2,358 MW, issued 2021-08-20
+          for 2021-08-23 02:00 UTC; docs/data-quality.md).
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 15000
+              config:
+                severity: warn  # flags ISO-NE's known bad versions without blocking the build
+      - name: share_of_system_pct
+        description: The zone's share of the system forecast, %.
+
+  - name: isone_zonal_load_forecast__day_ahead
+    description: >
+      ISO-NE's zonal load forecast as it stood at 10:00 Eastern the day before
+      each hour: the day-ahead benchmark per zone. A view over the __issued table.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, load_zone]
+    columns:
+      - name: load_zone
+        description: ISO-NE load zone.
+      - name: load_mw
+        description: Day-ahead forecast load in the zone, MW.
+
+  - name: isone_wind_forecast__base
+    description: >
+      Every hour of every seven-day wind forecast ISO-NE published, one row per
+      publication × hour × ingest run. No tests: they would scan all of bronze.
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC), derived by the ingest from market date and hour ending.
+      - name: issued_at
+        description: When ISO-NE published the forecast (UTC).
+
+  - name: isone_wind_forecast__issued
+    description: >
+      Each publication's forecast for each hour, once (about 7 per hour, one
+      per day ahead). Incremental table (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at, issued_at]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+        data_tests: [not_null]
+      - name: issued_at
+        description: When ISO-NE published the forecast (UTC).
+        data_tests: [not_null]
+      - name: lead_hours
+        description: Hours from publication to the hour's start.
+      - name: wind_mw
+        description: Forecast wind generation, MW.
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 5000
+      - name: market_date
+        description: Eastern day of the hour, as ISO-NE labels it.
+      - name: hour_ending
+        description: Hour ending as ISO-NE labels it (01–24; 02X when clocks fall back).
+
+  - name: isone_wind_forecast__day_ahead
+    description: >
+      ISO-NE's wind forecast as published the morning before each hour (the
+      last publication by 10:00 Eastern the day before). A view over the
+      __issued table.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [hour_start_at]
+    columns:
+      - name: hour_start_at
+        description: Start of the hour (UTC).
+      - name: wind_mw
+        description: Day-ahead forecast wind generation, MW.
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Unit tests — fixed input rows → expected output, for rules a data test can't

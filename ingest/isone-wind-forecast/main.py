@@ -24,7 +24,6 @@ handles both clock changes without guessing what "02X" or a skipped hour means
 
 # Import standard libraries
 import datetime
-import logging
 
 # Import third party libraries
 import pandas
@@ -74,10 +73,7 @@ for days in day_batches(eastern_days([-1, 0])):
     df['CreationDate'] = pandas.to_datetime(df['CreationDate'], format='ISO8601', utc=True)
     df['BeginDate'] = pandas.to_datetime(df['BeginDate'], utc=True)
     df['WindPowerForecast'] = df['WindPowerForecast'].astype('float64')
-    if not df.empty:
-        logging.info(f"Shaped {len(df)} rows from {len(records)} forecasts: "
-                     f"{df['BeginDate'].min()} to {df['BeginDate'].max()}")
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='BeginDate')

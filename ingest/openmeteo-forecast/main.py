@@ -42,8 +42,7 @@ points = fetch_points(FORECAST_URL, {
 # ── Shape ─────────────────────────────────────────────────────────────────────
 
 df = to_frame(points, HOURLY_VARIABLES)
-logging.info(f"Shaped {len(df)} rows: {df['time'].min()} to {df['time'].max()}")
 
 # ── Write ─────────────────────────────────────────────────────────────────────
 
-append_to_bronze(df)
+append_to_bronze(df, time_column='time')

@@ -9,8 +9,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Run as an unprivileged user that owns the project, since dbt writes its
+# target/ and logs/ there
+RUN useradd --create-home --uid 1000 app && chown app:app /app
+
 # Copy the dbt project (models, macros, tests, profiles)
-COPY . .
+COPY --chown=app:app . .
+USER app
 
 # dbt build, then dbt source freshness; on failure, logs a failure report that
 # emails an alert (see run.py)

@@ -6,7 +6,8 @@
   point, the zone's load and rooftop solar, and its prices. A source that
   doesn't cover an hour leaves its columns null; coverage starts at:
     2015-07  weather (reanalysis: the weather as it was)
-    2019-06  zone real-time and day-ahead prices
+    2019-06  zone real-time and day-ahead prices; ISO-NE's day-ahead zone load
+             forecast
     2025-02  zonal load with each zone's rooftop solar estimate
 
   The spread to the Hub is what this zone pays beyond the benchmark: energy
@@ -68,6 +69,7 @@ SELECT
 
     -- Zone load (ISO-NE, from 2025-02), MW: estimated, and with rooftop solar added back
     zonal_load.load_mw,
+    zone_forecast.load_mw                           AS isone_load_forecast_mw,
     zonal_load.btm_solar_mw,
     zonal_load.load_with_btm_solar_mw,
 
@@ -92,5 +94,7 @@ LEFT JOIN {{ ref('isone_rt_lmp__hourly') }} AS hub_rt
     ON hours.hour_start_at = hub_rt.hour_start_at AND hub_rt.location_code = 'HUB'
 LEFT JOIN {{ ref('isone_da_lmp__latest') }} AS da
     ON hours.hour_start_at = da.hour_start_at AND hours.load_zone = da.location_code
+LEFT JOIN {{ ref('isone_zonal_load_forecast__day_ahead') }} AS zone_forecast
+    ON hours.hour_start_at = zone_forecast.hour_start_at AND hours.load_zone = zone_forecast.load_zone
 LEFT JOIN {{ ref('us_holidays') }} AS holidays
     ON DATE(hours.hour_start_at, 'America/New_York') = holidays.holiday_date

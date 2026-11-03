@@ -18,11 +18,8 @@ Writes to:  bronze.eia_region_data (append) — one row per hour × measure × r
 """
 
 # Import shared ingest helpers
-from common.eia import fetch_hourly, hour_ranges, to_frame
+from common.eia import REGION_COLUMNS, fetch_hourly, hour_ranges, to_frame
 from common.load import append_to_bronze
-
-# Record fields under EIA's names, "-" written "_" (common/eia.py)
-COLUMNS = ['period', 'respondent', 'respondent_name', 'type', 'type_name', 'value', 'value_units']
 
 # One range of hours at a time (a single range unless backfilling)
 for start, end in hour_ranges():
@@ -33,4 +30,4 @@ for start, end in hour_ranges():
 
     # ── Shape and write ───────────────────────────────────────────────────────
 
-    append_to_bronze(to_frame(records, COLUMNS))
+    append_to_bronze(to_frame(records, REGION_COLUMNS), time_column='period')

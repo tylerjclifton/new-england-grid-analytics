@@ -50,5 +50,5 @@ for start, end in ranges:
 
     # ── Shape and write ───────────────────────────────────────────────────────
 
-    append_to_bronze(to_frame(points, HOURLY_VARIABLES))
+    append_to_bronze(to_frame(points, HOURLY_VARIABLES), time_column='time')
     pause(BACKFILL_PAUSE_SECONDS)

@@ -12,6 +12,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the shared helpers and every job's script
 COPY . .
 
+# Run as an unprivileged user: a job only reads its code and talks to APIs,
+# so it needs no root
+RUN useradd --create-home --uid 1000 app
+USER app
+
 # Let job scripts import the shared helpers (`from common.load import append_to_bronze`)
 ENV PYTHONPATH=/app
 

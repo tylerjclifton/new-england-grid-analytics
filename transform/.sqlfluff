@@ -22,7 +22,7 @@ load_macros_from_path = macros
 
 [sqlfluff:templater:jinja:context]
 # Empty (falsy), like dbt's parse phase: skips run_query() blocks that need a
-# live warehouse (macros/last_processed_run.sql)
+# live warehouse (macros/new_ingest_runs.sql)
 execute =
 
 [sqlfluff:rules:convention.quoted_literals]

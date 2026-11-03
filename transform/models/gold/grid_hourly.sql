@@ -8,7 +8,8 @@
     2015-07  EIA demand and ISO-NE's day-ahead demand forecast
     2019-01  EIA net generation and interchange (from 2015 too), Hub
              real-time and day-ahead prices (from mid-2019)
-    2019-06  fuel mix and the marginal fuel
+    2019-06  fuel mix and the marginal fuel; ISO-NE's day-ahead load and wind
+             forecasts
     2024     system load with ISO-NE's rooftop solar estimate; five-minute
              price peaks
 
@@ -66,6 +67,10 @@ SELECT
     eia.net_generation_mwh                  AS eia_net_generation_mwh,
     eia.interchange_mwh                     AS eia_interchange_mwh,
 
+    -- ISO-NE's own day-ahead forecasts (from 2019-06): the benchmark beside the actuals
+    load_forecast.load_mw                   AS isone_load_forecast_mw,
+    wind_forecast.wind_mw                   AS isone_wind_forecast_mw,
+
     -- System load (ISO-NE, from 2024): measured, and with rooftop solar added back
     system_load.load_mw,
     system_load.btm_solar_mw,
@@ -93,9 +98,13 @@ SELECT
     hub_prices.rt_is_final,
     hub_prices.da_lmp_usd_mwh
 FROM hours
-LEFT JOIN {{ ref('eia_region_data__by_hour') }} AS eia ON hours.hour_start_at = eia.hour_start_at
+LEFT JOIN {{ ref('eia_region_data__hourly') }} AS eia ON hours.hour_start_at = eia.hour_start_at
 LEFT JOIN {{ ref('isone_system_load__hourly') }} AS system_load ON hours.hour_start_at = system_load.hour_start_at
 LEFT JOIN {{ ref('isone_fuel_mix__hourly') }} AS fuel_mix ON hours.hour_start_at = fuel_mix.hour_start_at
 LEFT JOIN hub_prices ON hours.hour_start_at = hub_prices.hour_start_at
+LEFT JOIN {{ ref('isone_load_forecast__day_ahead') }} AS load_forecast
+    ON hours.hour_start_at = load_forecast.hour_start_at
+LEFT JOIN {{ ref('isone_wind_forecast__day_ahead') }} AS wind_forecast
+    ON hours.hour_start_at = wind_forecast.hour_start_at
 LEFT JOIN {{ ref('us_holidays') }} AS holidays
     ON DATE(hours.hour_start_at, 'America/New_York') = holidays.holiday_date

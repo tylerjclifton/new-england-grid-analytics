@@ -36,6 +36,11 @@ API_URL    = 'https://api.eia.gov/v2/electricity/rto'
 RESPONDENT = 'ISNE'
 PAGE_SIZE  = 5000  # the API's maximum
 
+# Record fields of each dataset, under EIA's names with "_" for "-" (to_frame).
+# The bulk files are reshaped into the region data's (eia-region-data-bulk).
+REGION_COLUMNS    = ['period', 'respondent', 'respondent_name', 'type', 'type_name', 'value', 'value_units']
+FUEL_TYPE_COLUMNS = ['period', 'respondent', 'respondent_name', 'fueltype', 'type_name', 'value', 'value_units']
+
 # Days per run, ending now. EIA revises recent hours (and regenerates its
 # files daily), so each run re-pulls two weeks; bronze keeps every version.
 LOOKBACK_DAYS = int(os.getenv('LOOKBACK_DAYS', '14'))

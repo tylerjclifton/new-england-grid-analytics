@@ -19,11 +19,8 @@ independent, hourly, revised record that lines up with EIA's demand series.
 """
 
 # Import shared ingest helpers
-from common.eia import fetch_hourly, hour_ranges, to_frame
+from common.eia import FUEL_TYPE_COLUMNS, fetch_hourly, hour_ranges, to_frame
 from common.load import append_to_bronze
-
-# Record fields under EIA's names, "-" written "_" (common/eia.py)
-COLUMNS = ['period', 'respondent', 'respondent_name', 'fueltype', 'type_name', 'value', 'value_units']
 
 # One range of hours at a time (a single range unless backfilling)
 for start, end in hour_ranges():
@@ -34,4 +31,4 @@ for start, end in hour_ranges():
 
     # ── Shape and write ───────────────────────────────────────────────────────
 
-    append_to_bronze(to_frame(records, COLUMNS))
+    append_to_bronze(to_frame(records, FUEL_TYPE_COLUMNS), time_column='period')

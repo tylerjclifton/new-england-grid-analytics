@@ -28,10 +28,10 @@ models:
       - name: hour_start_at
         description: Start of the hour (UTC).
         data_tests: [not_null]
-      - name: date_local
+      - name: local_date
         description: Eastern date of the hour.
         data_tests: [not_null]
-      - name: hour_local
+      - name: local_hour
         description: Eastern hour, 0–23 (hour 1 twice when clocks fall back; no hour 2 when they spring forward).
       - name: day_of_week
         description: Eastern weekday, 1 = Sunday … 7 = Saturday.
@@ -53,6 +53,10 @@ models:
         description: Net generation in New England, MWh (EIA-930).
       - name: eia_interchange_mwh
         description: Net interchange, MWh; negative when New England imported (EIA-930).
+      - name: isone_load_forecast_mw
+        description: ISO-NE's system load forecast for the hour as it stood at 10:00 Eastern the day before, MW — the day-ahead benchmark (2019-06 on).
+      - name: isone_wind_forecast_mw
+        description: ISO-NE's wind generation forecast for the hour, published the morning before, MW.
       - name: load_mw
         description: ISO-NE system load averaged over the hour, MW (= MWh).
       - name: btm_solar_mw
@@ -94,9 +98,9 @@ models:
           - accepted_values:
               arguments:
                 values: [ME, NH, VT, CT, RI, SEMA, WCMA, NEMA]
-      - name: date_local
+      - name: local_date
         description: Eastern date of the hour.
-      - name: hour_local
+      - name: local_hour
         description: Eastern hour, 0–23.
       - name: day_of_week
         description: Eastern weekday, 1 = Sunday … 7 = Saturday.
@@ -126,6 +130,8 @@ models:
         description: Snowfall over the hour, cm (labelled at the hour's end by Open-Meteo).
       - name: load_mw
         description: The zone's estimated load averaged over the hour, MW.
+      - name: isone_load_forecast_mw
+        description: ISO-NE's load forecast for the zone and hour as it stood at 10:00 Eastern the day before, MW (2019-06 on).
       - name: btm_solar_mw
         description: The zone's rooftop solar estimate averaged over the hour, MW.
       - name: load_with_btm_solar_mw

@@ -64,5 +64,5 @@ for batch in backfill_batches():
 
     # ── Write ─────────────────────────────────────────────────────────────────
 
-    append_to_bronze(df)
+    append_to_bronze(df, time_column='time')
     pause(BACKFILL_PAUSE_SECONDS)

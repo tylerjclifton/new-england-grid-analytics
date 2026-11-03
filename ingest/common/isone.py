@@ -62,6 +62,12 @@ PRICING_LOCATIONS = [
 ]
 
 
+# Every price record's fields (the three price jobs), under ISO-NE's names,
+# the nested location flattened by flatten_location()
+LMP_PRICES  = ['LmpTotal', 'EnergyComponent', 'CongestionComponent', 'LossComponent']
+LMP_COLUMNS = ['BeginDate', 'LocId', 'LocType', 'LocName', *LMP_PRICES]
+
+
 def eastern_days(offsets, today=None):
     """Eastern days at these offsets from today (-1 = yesterday, 1 = tomorrow), as YYYYMMDD."""
     today = today or pandas.Timestamp.now(tz=ISO_TIME_ZONE).date()
