@@ -3,12 +3,14 @@ Tests for the shared ingest helpers in ingest/common/: run.py (failure
 reports), fetch.py, and load.py (append to bronze).
 """
 
+import io
 import json
 import sys
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+import urllib3
 
 from common import fetch, load, run
 
@@ -133,6 +135,51 @@ def test_fetch_redacts_the_api_key_from_network_errors(monkeypatch, no_sleep, ca
     output = capsys.readouterr()
     assert "SECRET123" not in output.out + output.err
     assert "api_key=***" in output.out
+
+
+class BreakingStream(io.BytesIO):
+    """A response body whose connection drops after `limit` bytes (None: never)."""
+
+    def __init__(self, data, limit=None):
+        super().__init__(data)
+        self.limit = limit
+
+    def read(self, size=-1):
+        if self.limit is not None:
+            if self.tell() >= self.limit:
+                raise urllib3.exceptions.ProtocolError("Connection broken: IncompleteRead")
+            size = self.limit - self.tell() if size < 0 else min(size, self.limit - self.tell())
+        return super().read(size)
+
+
+def file_server(body, break_at=None, resume_status=206):
+    """A requests.get stand-in serving `body`, breaking the first connection at byte `break_at`."""
+    def get(url, headers=None, **kwargs):
+        get.ranges.append((headers or {}).get("Range"))
+        if not headers:
+            return SimpleNamespace(status_code=200, raw=BreakingStream(body, break_at), close=lambda: None)
+        start = int(headers["Range"].removeprefix("bytes=").removesuffix("-"))
+        return SimpleNamespace(status_code=resume_status, raw=BreakingStream(body[start:]), close=lambda: None)
+    get.ranges = []
+    return get
+
+
+def test_download_resumes_where_the_connection_broke(monkeypatch, no_sleep):
+    body = b"fips_code,county\n" + b"09001,Fairfield\n" * 1000
+    server = file_server(body, break_at=5000)
+    monkeypatch.setattr(fetch.requests, "get", server)
+
+    with fetch.download("https://files.test/big.csv") as file:
+        assert file.read() == body
+    assert server.ranges == [None, "bytes=5000-"]
+
+
+def test_download_fails_if_the_server_ignores_the_range(monkeypatch, no_sleep):
+    """A 200 to a resume would be the whole file again: rows read twice."""
+    monkeypatch.setattr(fetch.requests, "get", file_server(b"x" * 100, break_at=50, resume_status=200))
+
+    with pytest.raises(SystemExit), fetch.download("https://files.test/big.csv") as file:
+        file.read()
 
 
 # ── Failure reports (the alerting contract in infra/monitoring.tf) ────────────

@@ -7,6 +7,8 @@ edges replaced — HTTP responses are canned, and the DataFrame handed to
 append_to_bronze is captured instead of loaded into BigQuery.
 """
 
+import functools
+import io
 import json
 import runpy
 import sys
@@ -35,6 +37,14 @@ class FakeResponse:
     @property
     def content(self):
         return self.text.encode()
+
+    @functools.cached_property
+    def raw(self):
+        """The body as a stream, as a `stream=True` request reads it."""
+        return io.BytesIO(self.content)
+
+    def close(self):
+        pass
 
 
 @pytest.fixture

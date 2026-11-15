@@ -21,6 +21,8 @@ One short file per decision that shaped this project: the situation, what was de
 | [0015](0015-weather-history.md) | Weather history: reanalysis from 2015 for what happened, past forecasts from 2021 for what was known | Accepted |
 | [0016](0016-first-gold-tables.md) | First gold tables: hourly spines with every source joined, system-wide and by load zone | Accepted |
 | [0017](0017-isone-forecasts.md) | ISO-NE's own forecasts: every version of the load forecasts, and the daily wind forecast, as the benchmark | Accepted |
+| [0018](0018-eaglei-outages.md) | Power outages: DOE's EAGLE-I county history, a year's file at a time, mapped to load zones | Accepted |
+| [0019](0019-natural-gas-prices.md) | Natural gas prices: Henry Hub daily and New England power plants' price monthly, from EIA | Accepted |
 
 **Adding one:** copy the shape of an existing file, take the next number, add a row here.
 

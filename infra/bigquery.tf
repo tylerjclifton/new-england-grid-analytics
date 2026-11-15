@@ -214,6 +214,37 @@ locals {
       clustering  = ["LocId", "BeginDate"]
       columns     = local.isone_lmp_columns
     }
+
+    eia_natural_gas_prices = {
+      description = "Natural gas prices from the EIA API (decision 0019): the Henry Hub spot price each trading day ($/MMBtu), and the monthly price of gas delivered to power plants in each New England state ($/MCF; null where EIA withholds it). Each daily run re-pulls a month of the daily series and two years of the monthly one, which EIA revises. Backfilled from 2015. Grain: series × period × ingest run."
+      clustering  = ["series", "period"]
+      columns = [
+        { name = "period", type = "DATE", description = "The trading day (daily series) or the month's first day (monthly series)" },
+        { name = "frequency", type = "STRING", description = "daily or monthly: which kind of series the row is from (set by the ingest, as asked of the API)" },
+        { name = "duoarea", type = "STRING", description = "EIA area code: RGC for Henry Hub; S and the state for a state (SMA, SCT, …)" },
+        { name = "area_name", type = "STRING", description = "EIA area name, e.g. USA-CT, MASSACHUSETTS (NA for Henry Hub)" },
+        { name = "product", type = "STRING", description = "EIA product code, EPG0 (natural gas)" },
+        { name = "product_name", type = "STRING", description = "Product name, Natural Gas" },
+        { name = "process", type = "STRING", description = "EIA process code: PS0 spot price, PEU price delivered to electric power consumers" },
+        { name = "process_name", type = "STRING", description = "Process name, e.g. Spot Price, Electric Power Price" },
+        { name = "series", type = "STRING", description = "EIA series ID, e.g. RNGWHHD (Henry Hub spot), N3045MA3 (Massachusetts power plant price)" },
+        { name = "series_description", type = "STRING", description = "EIA's description of the series" },
+        { name = "value", type = "FLOAT", description = "Price, in units; null when EIA withholds it (a state with few gas-burning plants)" },
+        { name = "units", type = "STRING", description = "$/MMBTU (Henry Hub) or $/MCF (state prices); an MCF is about 1.04 MMBtu" },
+      ]
+    }
+
+    eaglei_outages = {
+      description = "Customers without power in each New England county every 15 minutes, from DOE's EAGLE-I (decision 0018), as published once a year, from 2014-11. A county × interval with nobody out has no row, and neither does a gap in collection. Backfill only, a year's file at a time. Grain: county × interval × ingest run."
+      clustering  = ["fips_code", "run_start_time"]
+      columns = [
+        { name = "fips_code", type = "STRING", description = "County FIPS code, five digits with the leading zero (09001 Fairfield, CT); Connecticut keeps its eight counties" },
+        { name = "county", type = "STRING", description = "County name, e.g. Suffolk" },
+        { name = "state", type = "STRING", description = "State name, e.g. Massachusetts" },
+        { name = "customers_out", type = "INTEGER", description = "Customers without power in the county at the interval's start; null in the few rows EAGLE-I left blank" },
+        { name = "run_start_time", type = "TIMESTAMP", description = "Start of the 15-minute collection interval (UTC)" },
+      ]
+    }
   }
 }
 

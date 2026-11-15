@@ -1,6 +1,6 @@
 # Data quality
 
-What the data covers, where it has gaps, and how well the sources agree with each other. Checked 2026-11-02 against production silver and gold, after every backfill ([0013](decisions/0013-isone-backfill.md), [0014](decisions/0014-eia-930.md), [0015](decisions/0015-weather-history.md)). Re-run the queries below to refresh the numbers; the checks that should keep holding are permanent tests (last section).
+What the data covers, where it has gaps, and how well the sources agree with each other. Checked 2026-11-02 against production silver and gold, after every backfill ([0013](decisions/0013-isone-backfill.md), [0014](decisions/0014-eia-930.md), [0015](decisions/0015-weather-history.md)); ISO-NE's forecasts ([0017](decisions/0017-isone-forecasts.md)) and past weather forecasts on 2026-11-15. Re-run the queries below to refresh the numbers; the checks that should keep holding are permanent tests (last section).
 
 ## Coverage and gaps
 
@@ -15,6 +15,9 @@ Hours a source should have, from where its history starts to three days ago (whe
 | System load (with rooftop solar) | 2024-06-01 | 21,145 | 0 | Every hour has all 12 intervals |
 | Zonal load | 2025-02-01 | 15,386 hours × 8 zones | 31 partial hours | Fewer than 12 intervals in a zone-hour |
 | Weather (reanalysis) | 2015-07-01 | 794,864 zone-hours | 0 | |
+| ISO-NE's day-ahead load forecast, system and zones | 2019-06-01 | 65,305 (× 8 zones) | 0 | Every hour has a version issued by the day-ahead deadline ([0017](decisions/0017-isone-forecasts.md)) |
+| ISO-NE's day-ahead wind forecast | 2019-06-02 | 65,277 | 0 | The first publication in the history (2019-06-01) covers only that day's later hours |
+| Weather forecast as issued, 1 and 2 days ahead | 2021-01-01 | 51,048 per lead (× 8 zones) | 0 | Through 2026-10-28; temperature throughout, other variables from 2024 |
 
 Gold keeps every hour regardless ([0016](decisions/0016-first-gold-tables.md)): a missing hour shows as nulls, never as a dropped row, so a model or chart sees the gap.
 

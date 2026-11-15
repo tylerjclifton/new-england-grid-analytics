@@ -4,7 +4,7 @@ A data engineering and modeling project on the New England electric grid: what i
 
 **Docs:** [setup on a new machine](docs/setup.md) · [runbook](docs/runbook.md) · [decision records](docs/decisions/README.md) · [roadmap](docs/roadmap.md) · [data source notes](docs/data-sources.md) · [data quality](docs/data-quality.md)
 
-**Status:** weather, ISO-NE (generation by fuel, load, prices) and EIA-930 (demand, ISO-NE's demand forecast, generation by fuel) are ingesting; history backfills are under way, and the first gold table is next ([roadmap](docs/roadmap.md)).
+**Status:** weather, ISO-NE (generation by fuel, load, prices, its own forecasts), EIA-930 (demand, ISO-NE's demand forecast, generation by fuel) and natural gas prices are ingesting, with history back to 2015 (2019 for most ISO-NE feeds), and customer power outages are loaded from DOE's yearly files; the first gold tables join them by hour. Modeling and the dashboard are next ([roadmap](docs/roadmap.md)).
 
 ---
 
@@ -22,6 +22,8 @@ A data engineering and modeling project on the New England electric grid: what i
 | EIA-930 API | ISO New England hourly demand, ISO-NE's day-ahead demand forecast, net generation, interchange | Daily | The last 14 days (EIA revises recent hours; [0014](docs/decisions/0014-eia-930.md)) |
 | EIA-930 API | ISO New England hourly net generation by fuel | Daily | The last 14 days |
 | Open-Meteo archive API | Hourly reanalysis (the best estimate of past weather) for the same points and variables | Daily | The last 14 days through yesterday ([0015](docs/decisions/0015-weather-history.md)) |
+| EIA natural gas prices | Henry Hub spot price every trading day; the monthly price New England's power plants paid for gas, by state | Daily | A month of Henry Hub and two years of state prices, which EIA revises ([0019](docs/decisions/0019-natural-gas-prices.md)) |
+| DOE EAGLE-I (figshare) | Customers without power per New England county, every 15 minutes, from 2014-11 | Yearly, by hand (backfill only) | Each year's national file, kept to New England, once it's posted (about February; [0018](docs/decisions/0018-eaglei-outages.md)) |
 
 The dbt transform runs every 6 hours, after the ingest runs.
 
@@ -31,10 +33,10 @@ The dbt transform runs every 6 hours, after the ingest runs.
 
 ```
 Open-Meteo  ──┐                         ┌─────────────────────────────────────────┐
-ISO-NE      ──┼──► Cloud Run Jobs ──►   │  BigQuery                               │
-EIA         ──┘         ↑               │  bronze → silver → gold                 │
-                 Cloud Scheduler        │            └─ dbt Core ─┘               │
-                                        └─────────────────────────────────────────┘
+ISO-NE      ──┤                         │  BigQuery                               │
+EIA         ──┼──► Cloud Run Jobs ──►   │  bronze → silver → gold                 │
+EAGLE-I     ──┘         ↑               │            └─ dbt Core ─┘               │
+                 Cloud Scheduler        └─────────────────────────────────────────┘
 ```
 
 Everything is defined in Terraform and deployed by GitHub Actions on every push to `main`. Sources in parentheses are planned.
@@ -66,6 +68,8 @@ Each layer is its own BigQuery dataset.
 | `eia_region_data_bulk` | hour × measure × ingest run | Backfill only: 2015-07 to 2018-12 from EIA's bulk files, in the API's shape |
 | `openmeteo_archive` | load zone × hour × ingest run | ~2,700 rows per daily run (two weeks re-pulled); backfilled from 2015-07 ([0015](docs/decisions/0015-weather-history.md)) |
 | `openmeteo_previous_runs` | load zone × hour × lead (1–2 days) × ingest run | Backfill only: past forecasts as issued, 2021 to 2026-10-28, for training models on what was known |
+| `eia_natural_gas_prices` | series × period (day or month) × ingest run | ~165 rows per daily run, ~7 MB/year; backfilled from 2015 ([0019](docs/decisions/0019-natural-gas-prices.md)) |
+| `eaglei_outages` | county × 15-minute interval × ingest run | Backfill only, a year at a time: ~800,000 rows (~40 MB) a year, from 2014-11; no row when nobody's out ([0018](docs/decisions/0018-eaglei-outages.md)) |
 
 | Silver model | Grain | What it produces |
 |---|---|---|
@@ -189,10 +193,10 @@ infra/                     Terraform: one file per resource family
   secrets.tf               Source credentials (values added by hand)
 ingest/                    One shared image for every ingest job
   common/run.py            What every run shares: job name, run timestamp, logging, failure reports
-  common/fetch.py          fetch(): HTTP GET that retries transient errors (rate limits too), redacts keys, and fails the job cleanly (step 1)
+  common/fetch.py          fetch(): HTTP GET that retries transient errors (rate limits too), redacts keys, and fails the job cleanly (step 1); download(): a large file read as it arrives, resuming after a broken connection
   common/load.py           append_to_bronze(): load into bronze (step 3)
   common/isone.py          ISO-NE API: login, days and pricing locations to pull, response unwrapping
-  common/eia.py            EIA API: key, hours to pull, paging, shaping
+  common/eia.py            EIA API: key, paging, shaping; EIA-930's hours to pull
   common/backfill.py       Backfill mode shared by every job that has one (day range, monthly batches)
   common/openmeteo.py      Open-Meteo: load zone points, variables, request settings, shaping
   openmeteo-forecast/      Open-Meteo hourly forecasts per load zone (every 6 hours)
@@ -210,6 +214,8 @@ ingest/                    One shared image for every ingest job
   eia-region-data/         EIA-930 demand, demand forecast, generation, interchange (daily)
   eia-fuel-type-data/      EIA-930 generation by fuel (daily)
   eia-region-data-bulk/    EIA-930 2015–2018 from the bulk files (backfill only)
+  eia-natural-gas-prices/  EIA Henry Hub daily and New England power plants' gas price monthly (daily)
+  eaglei-outages/          DOE EAGLE-I customers without power per county (backfill only, yearly)
   tests/                   Job tests against canned API responses
 transform/                 dbt Core project
   models/bronze/           Sources and freshness thresholds

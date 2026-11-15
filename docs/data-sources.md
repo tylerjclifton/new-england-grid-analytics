@@ -51,6 +51,25 @@ Hourly data for every US balancing authority; ISO-NE is `ISNE`. Explored 2026-10
   - Oil is a winter story: 2,025 MW average in January, 17 MW in March. On 2026-01-25, oil peaked at 7,865 MW, above gas (5,255 MW average that day) — gas pipelines serving heating first.
   - Net interchange averaged −1,006 MW: New England imports.
 
+## EIA natural gas prices
+
+Explored 2026-11-15 ([0019](decisions/0019-natural-gas-prices.md)). The same API and key as EIA-930, routes under `natural-gas/pri/`. Records have the same fields on both routes used: `period`, `duoarea`, `area-name`, `product`, `product-name`, `process`, `process-name`, `series`, `series-description`, `value` (a string, or null), `units`.
+
+- **Henry Hub spot** (`/fut`, `frequency=daily`, `facets[series][]=RNGWHHD`): $/MMBtu, every trading day from 1997-01-07 (7,504 days), posted about weekly (Nov 11 was the latest on Nov 15). The route's futures series stop after 2024-04-05; the spot price goes on.
+- **By state, monthly** (`/sum`, `frequency=monthly`, `facets[process][]`, `facets[duoarea][]=SMA`, …): `PEU` is the price delivered to electric power consumers, $/MCF. Since 2015 it exists for Massachusetts in every month, Connecticut 139 of 140, Rhode Island 101, Maine 46, New Hampshire 35 (2022–2024), Vermont none (withheld). Latest is about two months back (August on Nov 15). `PG1` (citygate) is far above it, with local delivery included: Massachusetts $19.64/MCF vs. $2.77 in August 2026.
+- **New England's daily price** (Algonquin Citygates) is ICE's. EIA's wholesale page (`eia.gov/electricity/wholesale`) has ICE gas files only through 2017; electricity files (Mass Hub on-peak, day ahead) continue.
+- **Speed:** on 2026-11-15 the API dropped connections and took over 60 s to answer `/sum` queries; `fetch()`'s retries got through. A facet with several values is the parameter repeated (`requests` sends a list that way); with `curl`, use `-g` so the brackets aren't read as a glob.
+
+## DOE EAGLE-I
+
+County-level customers without power every 15 minutes, from utilities' public outage maps, by Oak Ridge National Laboratory for DOE. Explored 2026-11-15 ([0018](decisions/0018-eaglei-outages.md)).
+
+- **Access:** figshare article 24237376, no key. `https://api.figshare.com/v2/articles/24237376` lists the latest version's files (name, size, `download_url`). Version 4 (2026-02-25): `eaglei_outages_2014.csv` … `eaglei_outages_2025.csv`, plus `MCC.csv` (modeled customers per county, 2022), `coverage_history.csv` (customers covered per state, 2018–2022) and `DQI.csv` (a data quality index by FEMA region, 2018–2022; region 1 is New England). Downloads redirect to presigned storage URLs that accept Range requests. Speed varied from 0.07 to 4.8 MB/s on one day, and a connection dropped mid-file.
+- **Files:** every US county, sorted by time; 78 MB (2014, from November) to 1.4 GB (2025, ~30 million rows). Columns `fips_code` (with the leading zero), `county`, `state` (full name), `customers_out`, `run_start_time`. The 2023 file calls `customers_out` `sum`; 2024's adds `total_customers`; 2020 has blank `customers_out` values.
+- **Time** is UTC ("All data in EAGLE-I is presented in Coordinated Universal Time", Brelsford et al., *Scientific Data*, 2024).
+- **No zero rows:** "Missing entries are either a customer outage value of zero or a gap in data collection", and the data doesn't say which. Outages shorter than 15 minutes may be missed.
+- **New England:** 791,258 rows in 2025 (2.6% of the file; Massachusetts 262,623, Connecticut 163,365, Maine 108,560, New Hampshire 100,424, Vermont 87,357, Rhode Island 68,929). Connecticut is in its eight old counties (09001–09015) in every year, not the 2022 planning regions. Customer coverage 2018–2022 was 83–99% by state (New Hampshire's 2018 started at 17%); the region's quality index fell to 62 in 2020 (69% of runs enabled), 90–94 in other years.
+
 ## Open-Meteo
 
 Weather APIs, no key; free for non-commercial use up to 10,000 calls/day ([0009](decisions/0009-weather-per-load-zone.md)). Checked 2026-10-29.
@@ -64,5 +83,3 @@ Weather APIs, no key; free for non-commercial use up to 10,000 calls/day ([0009]
 ## Not yet explored
 
 - **NOAA hourly observations** (Global Hourly/ISD): moved to AWS (`noaa-global-hourly-pds`); an alternative to reanalysis for observed weather.
-- **DOE EAGLE-I**: county-level customers without power, 15-minute, as yearly files. For the storm outage model.
-- **Gas prices**: EIA publishes Henry Hub daily; New England's Algonquin citygate price mostly isn't free.

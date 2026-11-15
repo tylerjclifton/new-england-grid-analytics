@@ -69,8 +69,13 @@ locals {
     # One page each: two weeks × 4 measures, two weeks × ~11 fuels
     "eia-region-data"    = { schedule = var.eia_ingestion_schedule, secrets = local.eia_key }
     "eia-fuel-type-data" = { schedule = var.eia_ingestion_schedule, secrets = local.eia_key }
+    # Two requests: Henry Hub daily, the states' power plant gas price monthly
+    "eia-natural-gas-prices" = { schedule = var.eia_ingestion_schedule, secrets = local.eia_key }
     # Backfill only: 2015–2018 from the bulk files (no key), ~45 MB of CSV each
     "eia-region-data-bulk" = { schedule = null, memory = "1Gi" }
+
+    # Backfill only: yearly files (no key), ~1.4 GB each, read as they download
+    "eaglei-outages" = { schedule = null, memory = "1Gi" }
   }
 
   # Every ingest job's full settings: the defaults, overridden by its entry

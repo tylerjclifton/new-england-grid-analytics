@@ -66,7 +66,7 @@ variable "isone_ingestion_schedule" {
 }
 
 variable "eia_ingestion_schedule" {
-  description = "Cron for the EIA ingest jobs (region data, fuel type data). Daily at 05:15, before the 06:20 transform; each run re-pulls two weeks, since EIA revises recent hours (decision 0014)."
+  description = "Cron for the EIA ingest jobs (region data, fuel type data, natural gas prices). Daily at 05:15, before the 06:20 transform; each run re-pulls recent periods, since EIA revises them (decisions 0014, 0019)."
   type        = string
   default     = "15 5 * * *"
 }

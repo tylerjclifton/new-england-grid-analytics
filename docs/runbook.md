@@ -72,8 +72,19 @@ gcloud run jobs execute ingest-isone-fuel-mix --region=us-east1 --task-timeout=3
 | `ingest-eia-region-data-bulk` (backfill only) | 20150701–20181231 | 7 files | 5 min |
 | `ingest-openmeteo-archive` | 20150701–20261031 | ~140 | 15 min |
 | `ingest-openmeteo-previous-runs` (backfill only) | 20210101–20261028 | ~70 | 10 min |
+| `ingest-eia-natural-gas-prices` | 20150101–20261115 | 2 | 1–40 min (EIA's API is sometimes slow; set `--task-timeout=1h`) |
+| `ingest-eaglei-outages` (backfill only) | 20141101–20251231 | 12 files, ~12 GB | ~1 h (`--task-timeout=3h`) |
 
 **Run ISO-NE backfills one at a time**: ISO-NE refuses a caller making more than a few day-file calls a second (HTTP 429), so backfills pause 1 s between calls ([0013](decisions/0013-isone-backfill.md)). `fetch()` retries a 429 for about 8 minutes; a block that outlasts that fails the run, which emails an alert. Add `--async` to start it and return; follow it in Cloud Run → Jobs → the job → Executions. Then **rebuild that feed's silver**, always (see the next section): e.g. `--select isone_fuel_mix__latest+`. Without it, backfilled rows can be skipped (a scheduled transform during the backfill) or added twice (merges only look at the last 35 days, [0003](decisions/0003-cost-guardrails.md)). Check the result with a count by month in bronze and silver.
+
+**EAGLE-I once a year.** A new year's outages are posted about each February ([0018](decisions/0018-eaglei-outages.md)). Run that year alone, then rebuild its silver:
+
+```bash
+gcloud run jobs execute ingest-eaglei-outages --region=us-east1 --task-timeout=1h \
+  --update-env-vars=BACKFILL_START=20260101,BACKFILL_END=20261231
+```
+
+A year not yet published fails the job, listing the files there are.
 
 ## Rebuild an incremental silver table
 

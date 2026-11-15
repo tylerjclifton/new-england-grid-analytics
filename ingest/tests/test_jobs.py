@@ -500,6 +500,59 @@ def test_eia_bulk_refuses_to_run_on_a_schedule(run_job):
         run_job('eia-region-data-bulk', [])
 
 
+def gas_record(period, series='RNGWHHD', duoarea='RGC', value='3.82', units='$/MMBTU'):
+    return {'period': period, 'duoarea': duoarea, 'area-name': 'NA', 'product': 'EPG0', 'product-name': 'Natural Gas',
+            'process': 'PS0', 'process-name': 'Spot Price', 'series': series,
+            'series-description': 'Henry Hub Natural Gas Spot Price (Dollars per Million Btu)',
+            'value': value, 'units': units}
+
+
+def test_gas_prices_pull_each_series_lookback(run_job, eia_key, monkeypatch):
+    """Two queries: Henry Hub daily for a month, the states' power plant price monthly for two years."""
+    import datetime
+
+    class FixedDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.datetime(2026, 11, 15, 12, tzinfo=tz)
+
+    monkeypatch.setattr(datetime, 'datetime', FixedDatetime)
+    run_job('eia-natural-gas-prices', [eia_page([gas_record('2026-11-11')]),
+                                       eia_page([gas_record('2026-08', 'N3045MA3', 'SMA', '2.77', '$/MCF')])])
+
+    daily, monthly = run_job.requests
+    assert daily['url'].endswith('/natural-gas/pri/fut/data/')
+    assert daily['params']['frequency'] == 'daily' and daily['params']['facets[series][]'] == ['RNGWHHD']
+    assert daily['params']['start'] == '2026-10-16' and 'end' not in daily['params']
+    assert monthly['url'].endswith('/natural-gas/pri/sum/data/')
+    assert monthly['params']['frequency'] == 'monthly' and monthly['params']['facets[process][]'] == ['PEU']
+    assert monthly['params']['facets[duoarea][]'] == ['SCT', 'SMA', 'SME', 'SNH', 'SRI', 'SVT']
+    assert monthly['params']['start'] == '2024-11'
+
+
+def test_gas_prices_shape_to_dates(run_job, eia_key):
+    run_job('eia-natural-gas-prices', [eia_page([gas_record('2026-11-11')]),
+                                       eia_page([gas_record('2026-08', 'N3045MA3', 'SMA', '2.77', '$/MCF'),
+                                                 gas_record('2026-08', 'N3045VT3', 'SVT', None, '$/MCF')])])
+
+    daily, monthly = run_job.loads
+    assert list(daily.columns) == ['period', 'frequency', 'duoarea', 'area_name', 'product', 'product_name',
+                                   'process', 'process_name', 'series', 'series_description', 'value', 'units']
+    assert str(daily.loc[0, 'period']) == '2026-11-11' and daily.loc[0, 'frequency'] == 'daily'
+    assert daily['value'].tolist() == [3.82]
+    assert str(monthly.loc[0, 'period']) == '2026-08-01' and set(monthly['frequency']) == {'monthly'}
+    assert monthly.loc[0, 'value'] == 2.77 and pd.isna(monthly.loc[1, 'value'])  # withheld by EIA
+
+
+def test_gas_prices_backfill_is_one_query_per_series(run_job, eia_key, backfill):
+    backfill('20150101', '20261115')
+    run_job('eia-natural-gas-prices', [eia_page([]), eia_page([])])
+
+    daily, monthly = (request['params'] for request in run_job.requests)
+    assert (daily['start'], daily['end']) == ('2015-01-01', '2026-11-15')
+    assert (monthly['start'], monthly['end']) == ('2015-01', '2026-11')
+
+
 # ── Open-Meteo history (openmeteo-archive, openmeteo-previous-runs; decision 0015) ──
 
 def test_archive_normal_run_is_the_last_two_weeks_through_yesterday(run_job):
@@ -637,3 +690,63 @@ def test_wind_forecast_partial_first_day(run_job, isone_login):
 
     assert df['BeginDate'].iloc[0] == pd.Timestamp('2026-10-30T14:00', tz='UTC')
     assert str(df['MarketDate'].iloc[0]) == '2026-10-30'
+
+
+# ── EAGLE-I outages (eaglei-outages; decision 0018) ───────────────────────────
+
+def eaglei_article(*years):
+    """The figshare article listing, with one file per year (and a supplementary file)."""
+    files = [{'name': f"eaglei_outages_{year}.csv", 'download_url': f"https://files.test/{year}"} for year in years]
+    return {'files': [*files, {'name': 'MCC.csv', 'download_url': 'https://files.test/mcc'}]}
+
+
+EAGLEI_HEADER = 'fips_code,county,state,customers_out,run_start_time\n'
+
+
+def test_eaglei_keeps_new_england_in_range(run_job, backfill):
+    backfill('20250101', '20250101')
+    csv = EAGLEI_HEADER + (
+        '01001,Autauga,Alabama,6,2025-01-01 00:00:00\n'
+        '09001,Fairfield,Connecticut,12,2025-01-01 00:00:00\n'
+        '25025,Suffolk,Massachusetts,,2025-01-01 00:15:00\n'          # blank: null
+        '50007,Chittenden,Vermont,3,2025-01-02 00:00:00\n'            # after the range
+    )
+    df = run_job('eaglei-outages', [eaglei_article(2024, 2025), csv])
+
+    assert [request['url'] for request in run_job.requests] == [
+        'https://api.figshare.com/v2/articles/24237376', 'https://files.test/2025']
+    assert list(df.columns) == ['fips_code', 'county', 'state', 'customers_out', 'run_start_time']
+    assert df['fips_code'].tolist() == ['09001', '25025']  # the leading zero kept
+    assert df['customers_out'].dtype == 'Int64' and pd.isna(df.loc[1, 'customers_out'])
+    assert df.loc[0, 'run_start_time'] == pd.Timestamp('2025-01-01T00:00', tz='UTC')
+
+
+def test_eaglei_reads_every_years_columns(run_job, backfill):
+    """2023's file names customers_out "sum"; 2024's adds total_customers."""
+    backfill('20231231', '20240101')
+    csv_2023 = 'fips_code,county,state,sum,run_start_time\n23005,Cumberland,Maine,40,2023-12-31 23:45:00\n'
+    csv_2024 = (EAGLEI_HEADER.replace('\n', ',total_customers\n')
+                + '23005,Cumberland,Maine,7,2024-01-01 00:15:00,227401\n')
+    run_job('eaglei-outages', [eaglei_article(2023, 2024), csv_2023, csv_2024])
+
+    assert [df['customers_out'].tolist() for df in run_job.loads] == [[40], [7]]
+    assert all(list(df.columns) == ['fips_code', 'county', 'state', 'customers_out', 'run_start_time']
+               for df in run_job.loads)
+
+
+def test_eaglei_unpublished_year_fails(run_job, backfill):
+    backfill('20260101', '20261231')
+    with pytest.raises(SystemExit):
+        run_job('eaglei-outages', [eaglei_article(2024, 2025)])
+
+
+def test_eaglei_missing_column_fails(run_job, backfill):
+    backfill('20250101', '20250101')
+    with pytest.raises(SystemExit):
+        run_job('eaglei-outages', [eaglei_article(2025), 'fips_code,county,state,run_start_time\n'])
+
+
+def test_eaglei_refuses_to_run_on_a_schedule(run_job):
+    with pytest.raises(SystemExit):
+        run_job('eaglei-outages', [])
+    assert run_job.requests == []
