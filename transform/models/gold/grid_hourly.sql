@@ -5,7 +5,8 @@
   source has (tomorrow, once day-ahead prices are out), with what each source
   says about it. A source that doesn't cover an hour leaves its columns null;
   coverage starts at:
-    2015-07  EIA demand and ISO-NE's day-ahead demand forecast
+    2015-07  EIA demand and ISO-NE's day-ahead demand forecast; Henry Hub's
+             natural gas price
     2019-01  EIA net generation and interchange (from 2015 too), Hub
              real-time and day-ahead prices (from mid-2019)
     2019-06  fuel mix and the marginal fuel; ISO-NE's day-ahead load and wind
@@ -19,8 +20,8 @@
   Steps:
     1. hours        — every hour in range (a spine, so missing data shows as null)
     2. hub_prices   — the Hub's real-time and day-ahead prices
-    3. final select — the spine with every source joined on hour; Eastern
-                      calendar columns
+    3. final select — the spine with every source joined on hour (gas on
+                      Eastern date); Eastern calendar columns
 #}
 
 WITH
@@ -96,7 +97,11 @@ SELECT
     hub_prices.rt_lmp_usd_mwh,
     hub_prices.rt_lmp_max_five_minute_usd_mwh,
     hub_prices.rt_is_final,
-    hub_prices.da_lmp_usd_mwh
+    hub_prices.da_lmp_usd_mwh,
+
+    -- Natural gas at Henry Hub, $/MMBtu: the latest trading day's price, up
+    -- to 4 days back (weekends and holidays have no trades)
+    henry_hub.price_usd_mmbtu               AS henry_hub_gas_usd_mmbtu
 FROM hours
 LEFT JOIN {{ ref('eia_region_data__hourly') }} AS eia ON hours.hour_start_at = eia.hour_start_at
 LEFT JOIN {{ ref('isone_system_load__hourly') }} AS system_load ON hours.hour_start_at = system_load.hour_start_at
@@ -106,5 +111,8 @@ LEFT JOIN {{ ref('isone_load_forecast__day_ahead') }} AS load_forecast
     ON hours.hour_start_at = load_forecast.hour_start_at
 LEFT JOIN {{ ref('isone_wind_forecast__day_ahead') }} AS wind_forecast
     ON hours.hour_start_at = wind_forecast.hour_start_at
+LEFT JOIN {{ ref('eia_natural_gas_prices__daily') }} AS henry_hub
+    ON DATE(hours.hour_start_at, 'America/New_York') = henry_hub.local_date
+    AND henry_hub.series = 'RNGWHHD'  -- Henry Hub spot
 LEFT JOIN {{ ref('us_holidays') }} AS holidays
     ON DATE(hours.hour_start_at, 'America/New_York') = holidays.holiday_date

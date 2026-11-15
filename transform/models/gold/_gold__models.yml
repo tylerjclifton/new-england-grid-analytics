@@ -19,7 +19,8 @@ models:
       One row per hour for New England as a whole: EIA demand and ISO-NE's
       day-ahead forecast (2015-07 on), system load with and without rooftop
       solar (2024 on), generation by fuel and the marginal fuel (2019-06 on),
-      and the Hub's real-time and day-ahead prices (2019 on).
+      the Hub's real-time and day-ahead prices (2019 on), and Henry Hub's
+      natural gas price (2015 on).
     data_tests:
       - unique_combination:
           arguments:
@@ -77,12 +78,18 @@ models:
         description: Whether the hour's real-time price is ISO-NE's final (else preliminary).
       - name: da_lmp_usd_mwh
         description: The Hub's day-ahead price for the hour, $/MWh.
+      - name: henry_hub_gas_usd_mmbtu
+        description: >
+          Natural gas at Henry Hub, $/MMBtu: the price of the latest trading day
+          on or before the hour's Eastern date, up to 4 days back (decision
+          0019). The national price; New England's runs higher in winter.
 
   - name: grid_zone_hourly
     description: >
       One row per hour × load zone: the zone's weather (2015-07 on), its load
-      and rooftop solar (2025-02 on), and its real-time and day-ahead prices
-      with the spread to the Hub (2019 on).
+      and rooftop solar (2025-02 on), its real-time and day-ahead prices with
+      the spread to the Hub (2019 on), and what its state's power plants paid
+      for gas each month (2015 on, where EIA publishes it).
     data_tests:
       - unique_combination:
           arguments:
@@ -148,3 +155,9 @@ models:
         description: Whether the hour's real-time price is final.
       - name: da_lmp_usd_mwh
         description: The zone's day-ahead price for the hour, $/MWh.
+      - name: power_plant_gas_usd_mcf
+        description: >
+          What power plants in the zone's state paid for natural gas that month,
+          $/MCF (about 1.04 MMBtu), from EIA (decision 0019); Massachusetts' for
+          its three zones. Null where EIA withholds it (Vermont always, the
+          smaller states often) and for the latest two months or so.

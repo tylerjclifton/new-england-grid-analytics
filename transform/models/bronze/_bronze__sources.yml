@@ -101,6 +101,17 @@ sources:
             warn_after: {count: 26, period: hour}
             error_after: {count: 50, period: hour}
 
+      - name: eia_natural_gas_prices
+        description: >
+          Natural gas prices from the EIA API (decision 0019): Henry Hub's spot
+          price each trading day ($/MMBtu), and the monthly price New England
+          power plants paid for gas, by state ($/MCF). Each daily run re-pulls a
+          month and two years of them. Grain: series × period × ingest run.
+        config:
+          freshness:  # daily, not every 6 hours; the slack covers one failed run
+            warn_after: {count: 26, period: hour}
+            error_after: {count: 50, period: hour}
+
       - name: openmeteo_archive
         description: >
           Open-Meteo hourly reanalysis (the best estimate of past weather), one

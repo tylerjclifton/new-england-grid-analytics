@@ -10,7 +10,8 @@ seeds:
       The ISO-NE locations this project tracks (decision 0012): the Hub and the
       eight load zones, by ISO-NE location ID. Maps the IDs in the price and
       zonal load feeds to the load zone codes the weather uses (ME … NEMA,
-      decision 0009). Grain: one row per location.
+      decision 0009), and each zone to its state, for sources by state (gas
+      prices, decision 0019). Grain: one row per location.
     config:
       column_types:
         location_id: INT64
@@ -25,6 +26,12 @@ seeds:
         description: ISO-NE's name for the location.
       - name: description
         description: Plain-language name.
+      - name: state
+        description: The zone's state (MA for SEMA, WCMA and NEMA); null for the Hub.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [CT, MA, ME, NH, RI, VT]
 
   - name: us_holidays
     description: >

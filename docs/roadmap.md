@@ -4,7 +4,7 @@ Planned work, roughly in order, with why. Move an item to a [decision record](de
 
 ## Next
 
-1. **Outages and gas prices into silver and gold** ([0018](decisions/0018-eaglei-outages.md), [0019](decisions/0019-natural-gas-prices.md)): backfill both, then the county seed, silver models, and their columns in gold. That completes the data the models below need.
+1. **Load the outage history** ([0018](decisions/0018-eaglei-outages.md)): figshare refuses Google Cloud, so stage the yearly files in a landing bucket from a workstation (the deployer needs to manage Cloud Storage first), point the job at the bucket, backfill, then the county seed, silver models and gold columns. That completes the data the models below need.
 2. **Models** (below), now that history exists: from 2015 for demand and weather, mid-2019 for prices, fuel mix and ISO-NE's forecasts.
 3. **Dashboard** (Streamlit on Cloud Run, scaling to zero, like the MBTA site), reading `gold.grid_hourly` and `gold.grid_zone_hourly` ([0016](decisions/0016-first-gold-tables.md)): fuel mix, prices, load vs. temperature, and the models' results. Multiple pages from the start. Served at a path under tylerclifton.com (e.g. `/ne-power-grid`), behind a small proxy shared with the MBTA site, rather than a subdomain.
 

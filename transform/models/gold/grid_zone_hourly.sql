@@ -3,9 +3,12 @@
 
   Every hour from 2015-07-01 (Eastern midnight) through the latest hour any
   source has, for each of ISO-NE's eight load zones: the weather at the zone's
-  point, the zone's load and rooftop solar, and its prices. A source that
-  doesn't cover an hour leaves its columns null; coverage starts at:
-    2015-07  weather (reanalysis: the weather as it was)
+  point, the zone's load and rooftop solar, its prices, and what its state's
+  power plants paid for gas. A source that doesn't cover an hour leaves its
+  columns null; coverage starts at:
+    2015-07  weather (reanalysis: the weather as it was); power plants' gas
+             price, monthly, where EIA publishes it (Massachusetts and
+             Connecticut nearly always, Vermont never; decision 0019)
     2019-06  zone real-time and day-ahead prices; ISO-NE's day-ahead zone load
              forecast
     2025-02  zonal load with each zone's rooftop solar estimate
@@ -23,10 +26,10 @@
   rebuilt every transform run from silver (~800,000 rows).
 
   Steps:
-    1. hours        — every hour in range × zone (a spine)
+    1. hours        — every hour in range × zone (a spine), with the zone's state
     2. final select — the spine with weather (sums from the next label), load
-                      and prices joined on hour × zone; Eastern calendar
-                      columns; spread to the Hub
+                      and prices joined on hour × zone, gas on Eastern date ×
+                      state; Eastern calendar columns; spread to the Hub
 #}
 
 WITH
@@ -35,7 +38,8 @@ WITH
     hours AS (
         SELECT
             hour_start_at,
-            locations.location_code AS load_zone
+            locations.location_code AS load_zone,
+            locations.state
         FROM UNNEST(GENERATE_TIMESTAMP_ARRAY(
             TIMESTAMP '2015-07-01 04:00:00+00',
             GREATEST(
@@ -79,7 +83,11 @@ SELECT
     rt.congestion_usd_mwh                           AS rt_congestion_usd_mwh,
     rt.lmp_usd_mwh - hub_rt.lmp_usd_mwh             AS rt_spread_to_hub_usd_mwh,
     rt.is_final                                     AS rt_is_final,
-    da.lmp_usd_mwh                                  AS da_lmp_usd_mwh
+    da.lmp_usd_mwh                                  AS da_lmp_usd_mwh,
+
+    -- What the state's power plants paid for gas that month, $/MCF (EIA;
+    -- Massachusetts' for its three zones)
+    state_gas.price_usd_mcf                         AS power_plant_gas_usd_mcf
 FROM hours
 LEFT JOIN {{ ref('openmeteo_archive__latest') }} AS weather
     ON hours.hour_start_at = weather.hour_at AND hours.load_zone = weather.load_zone
@@ -96,5 +104,8 @@ LEFT JOIN {{ ref('isone_da_lmp__latest') }} AS da
     ON hours.hour_start_at = da.hour_start_at AND hours.load_zone = da.location_code
 LEFT JOIN {{ ref('isone_zonal_load_forecast__day_ahead') }} AS zone_forecast
     ON hours.hour_start_at = zone_forecast.hour_start_at AND hours.load_zone = zone_forecast.load_zone
+LEFT JOIN {{ ref('eia_natural_gas_prices__daily') }} AS state_gas
+    ON DATE(hours.hour_start_at, 'America/New_York') = state_gas.local_date
+    AND hours.state = state_gas.state
 LEFT JOIN {{ ref('us_holidays') }} AS holidays
     ON DATE(hours.hour_start_at, 'America/New_York') = holidays.holiday_date

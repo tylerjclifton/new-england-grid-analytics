@@ -658,6 +658,108 @@ models:
         description: The ingest run this version came from (UTC).
         data_tests: [not_null]
 
+  # ── EIA: natural gas prices (decision 0019) ─────────────────────────────────
+
+  - name: eia_natural_gas_prices__base
+    description: >
+      Every EIA natural gas price pulled, one row per series × period × ingest
+      run: Henry Hub each trading day ($/MMBtu) and New England power plants'
+      price each month by state ($/MCF). No tests: they would scan all of
+      bronze (see header).
+    columns:
+      - name: price_date
+        description: The trading day, or the month's first day for a monthly price.
+      - name: series
+        description: EIA series ID (RNGWHHD Henry Hub spot; N3045<state>3 a state's power plant price).
+      - name: ingested_at
+        description: The ingest run that saw this version (UTC).
+
+  - name: eia_natural_gas_prices__latest
+    description: >
+      EIA's newest figure for each natural gas price, 2015 on. Incremental
+      table, merged over all of itself (see model header).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [series, price_date]
+    columns:
+      - name: price_date
+        description: The trading day (daily series) or the month's first day (monthly series).
+        data_tests: [not_null]
+      - name: frequency
+        description: daily (Henry Hub) or monthly (state prices).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [daily, monthly]
+      - name: series
+        description: EIA series ID.
+        data_tests: [not_null]
+      - name: series_name
+        description: EIA's description of the series.
+      - name: state
+        description: The state a monthly price is for (CT, MA, ME, NH, RI, VT); null for Henry Hub.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [CT, MA, ME, NH, RI, VT]
+      - name: price_usd_mmbtu
+        description: Henry Hub's spot price, $/MMBtu; null for the state prices.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 50
+              config:
+                severity: warn  # a spike past $50 would be news, not necessarily an error
+      - name: price_usd_mcf
+        description: >
+          What the state's power plants paid for gas that month, $/MCF (about
+          1.04 MMBtu); null where EIA withholds it, and for Henry Hub.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+              config:
+                severity: warn
+      - name: units
+        description: As EIA gives them; each price is in the column for its unit.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['$/MMBTU', '$/MCF']
+      - name: ingested_at
+        description: The ingest run this version came from (UTC).
+        data_tests: [not_null]
+
+  - name: eia_natural_gas_prices__daily
+    description: >
+      The natural gas price in effect on each Eastern date, per series: Henry
+      Hub's latest trading day (up to 4 days back), and each state's power
+      plant price for the month. A view over the __latest table, read by gold.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [local_date, series]
+    columns:
+      - name: local_date
+        description: The Eastern date the price is in effect on.
+        data_tests: [not_null]
+      - name: series
+        description: EIA series ID.
+      - name: frequency
+        description: daily or monthly.
+      - name: state
+        description: The state, for a monthly price; null for Henry Hub.
+      - name: price_date
+        description: The trading day or month (its first day) the price is from.
+      - name: price_usd_mmbtu
+        description: Henry Hub's price, $/MMBtu.
+      - name: price_usd_mcf
+        description: The state's power plant price, $/MCF.
+
   # ── ISO-NE: forecasts (decision 0017) ───────────────────────────────────────
 
   - name: isone_load_forecast__base
@@ -864,3 +966,30 @@ unit_tests:
       rows:
         - {interval_start_at: "2026-10-30 16:00:00", location_code: HUB, lmp_usd_mwh: 31.0, is_final: true}
         - {interval_start_at: "2026-10-30 16:00:00", location_code: ME,  lmp_usd_mwh: 29.0, is_final: false}
+
+  - name: eia_natural_gas_prices__daily_carries_trades_up_to_four_days
+    description: >
+      Henry Hub has no trades on weekends and holidays, so each date takes the
+      latest trade on or before it, but never one more than 4 days old: a
+      Friday's price covers the weekend and a Monday holiday, and a gap longer
+      than that is null rather than an old price looking current.
+    model: eia_natural_gas_prices__daily
+    given:
+      - input: ref('eia_natural_gas_prices__latest')
+        rows:
+          # Friday 2026-01-02, then nothing until Thursday 2026-01-08
+          - {price_date: "2026-01-02", frequency: daily, series: RNGWHHD, price_usd_mmbtu: 3.60}
+          - {price_date: "2026-01-08", frequency: daily, series: RNGWHHD, price_usd_mmbtu: 3.80}
+    expect:
+      rows:
+        - {local_date: "2026-01-02", price_date: "2026-01-02", price_usd_mmbtu: 3.60}
+        - {local_date: "2026-01-03", price_date: "2026-01-02", price_usd_mmbtu: 3.60}
+        - {local_date: "2026-01-04", price_date: "2026-01-02", price_usd_mmbtu: 3.60}
+        - {local_date: "2026-01-05", price_date: "2026-01-02", price_usd_mmbtu: 3.60}
+        - {local_date: "2026-01-06", price_date: "2026-01-02", price_usd_mmbtu: 3.60}
+        # 2026-01-07: the last trade is 5 days old, so no row
+        - {local_date: "2026-01-08", price_date: "2026-01-08", price_usd_mmbtu: 3.80}
+        - {local_date: "2026-01-09", price_date: "2026-01-08", price_usd_mmbtu: 3.80}
+        - {local_date: "2026-01-10", price_date: "2026-01-08", price_usd_mmbtu: 3.80}
+        - {local_date: "2026-01-11", price_date: "2026-01-08", price_usd_mmbtu: 3.80}
+        - {local_date: "2026-01-12", price_date: "2026-01-08", price_usd_mmbtu: 3.80}
